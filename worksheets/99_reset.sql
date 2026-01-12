@@ -5,12 +5,20 @@
 -- Run this to return to a clean slate.
 -- =============================================================================
 
--- Drop views first
-DROP VIEW IF EXISTS GENAI_COMPLIANCE_DEMO.PUBLIC.compliance_dashboard;
-DROP VIEW IF EXISTS GENAI_COMPLIANCE_DEMO.PUBLIC.attachment_analysis;
-DROP VIEW IF EXISTS GENAI_COMPLIANCE_DEMO.PUBLIC.email_analysis;
+USE DATABASE GENAI_COMPLIANCE_DEMO;
 
--- Drop database (removes all tables)
+-- Drop views created in worksheets
+DROP VIEW IF EXISTS complete_dashboard;
+DROP VIEW IF EXISTS complete_full_analysis;
+DROP VIEW IF EXISTS complete_attachment_analysis;
+DROP VIEW IF EXISTS complete_email_analysis;
+DROP VIEW IF EXISTS aisql_attachment_analysis;
+DROP VIEW IF EXISTS aisql_email_analysis;
+
+-- Drop stage
+DROP STAGE IF EXISTS compliance_attachments;
+
+-- Drop database (removes all tables, schemas)
 DROP DATABASE IF EXISTS GENAI_COMPLIANCE_DEMO;
 
 -- Optionally drop warehouse

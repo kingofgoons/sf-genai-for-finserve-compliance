@@ -48,12 +48,12 @@ A hands-on lab demonstrating Snowflake Cortex AI for email and attachment compli
 - 🇫🇷 French email (data exfiltration)  
 - 🇺🇸 English emails (market manipulation, clean)
 
-**Attachments (3) — stored on stage:**
+**Attachments (3) — stored on `@compliance_attachments` stage:**
 | File | Type | Content |
 |------|------|---------|
-| `@stage/AAPL_Insider_Analysis.xlsx` | Spreadsheet | "BUY BEFORE ANNOUNCEMENT" |
-| `@stage/order_entry_screenshot.png` | Screenshot | Trading system with coordination notes |
-| `@stage/trading_infrastructure.pdf` | Diagram | Internal architecture, IPs, "NOT FOR EXTERNAL" |
+| `@compliance_attachments/.../AAPL_Insider_Analysis.xlsx` | Spreadsheet | "BUY BEFORE ANNOUNCEMENT" |
+| `@compliance_attachments/.../order_entry_screenshot.png` | Screenshot | Trading system with coordination notes |
+| `@compliance_attachments/.../trading_infrastructure.pdf` | Diagram | Internal architecture, IPs, "NOT FOR EXTERNAL" |
 
 ## Violation Levels
 
