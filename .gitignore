@@ -23,6 +23,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# Office temp files
+~$*
+
 # Credentials (never commit)
 *.pem
 *.key
