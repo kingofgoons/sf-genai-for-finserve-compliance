@@ -1,21 +1,19 @@
 -- =============================================================================
 -- 00_SETUP.SQL
--- Snowflake GenAI for Financial Services Compliance - Hands-on Lab
+-- Snowflake GenAI for Financial Services Compliance
 -- 
--- This worksheet creates the database, schema, and sample data for the demo.
--- Run this FIRST before proceeding to other worksheets.
+-- Creates database, tables, sample emails, and stage-based attachments.
+-- Run this FIRST before other worksheets.
 -- =============================================================================
 
 -- Set context
-USE ROLE ACCOUNTADMIN;  -- Or a role with CREATE DATABASE privileges
+USE ROLE ACCOUNTADMIN;  -- Or role with CREATE DATABASE
 
--- Create demo database and schema
 CREATE DATABASE IF NOT EXISTS GENAI_COMPLIANCE_DEMO;
 USE DATABASE GENAI_COMPLIANCE_DEMO;
 CREATE SCHEMA IF NOT EXISTS PUBLIC;
 USE SCHEMA PUBLIC;
 
--- Create warehouse if needed (adjust size as appropriate)
 CREATE WAREHOUSE IF NOT EXISTS GENAI_HOL_WH
     WAREHOUSE_SIZE = 'XSMALL'
     AUTO_SUSPEND = 60
@@ -24,137 +22,178 @@ CREATE WAREHOUSE IF NOT EXISTS GENAI_HOL_WH
 USE WAREHOUSE GENAI_HOL_WH;
 
 -- =============================================================================
+-- STAGE FOR ATTACHMENTS
+-- In production, actual files would be uploaded here
+-- =============================================================================
+
+CREATE OR REPLACE STAGE compliance_attachments
+    DIRECTORY = (ENABLE = TRUE)
+    COMMENT = 'Stage for email attachments (images, documents, spreadsheets)';
+
+-- =============================================================================
 -- TABLES
 -- =============================================================================
 
--- Main email table for compliance monitoring
+-- Emails for compliance monitoring
 CREATE OR REPLACE TABLE compliance_emails (
-    email_id            INTEGER AUTOINCREMENT PRIMARY KEY,
+    email_id            INTEGER PRIMARY KEY,
     sender              VARCHAR(200),
     recipient           VARCHAR(200),
     subject             VARCHAR(500),
     email_content       TEXT,
-    original_language   VARCHAR(10) DEFAULT 'en',
+    has_attachment      BOOLEAN DEFAULT FALSE,
     trader_id           VARCHAR(50),
     department          VARCHAR(100),
-    ingestion_timestamp TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
-    compliance_flag     BOOLEAN DEFAULT FALSE
+    received_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
--- Historical violations for similarity matching
-CREATE OR REPLACE TABLE historical_violations (
-    violation_id    INTEGER AUTOINCREMENT PRIMARY KEY,
-    violation_type  VARCHAR(100),
-    email_content   TEXT,
-    detected_date   DATE,
-    resolution      VARCHAR(500)
-);
-
--- Compliance incidents for aggregation demo
-CREATE OR REPLACE TABLE compliance_incidents (
-    incident_id         INTEGER AUTOINCREMENT PRIMARY KEY,
-    department          VARCHAR(100),
-    incident_description TEXT,
-    incident_date       DATE,
-    severity            VARCHAR(20)
+-- Email attachments with stage file paths
+CREATE OR REPLACE TABLE email_attachments (
+    attachment_id   INTEGER PRIMARY KEY,
+    email_id        INTEGER REFERENCES compliance_emails(email_id),
+    filename        VARCHAR(255),
+    file_type       VARCHAR(50),
+    stage_path      VARCHAR(500),  -- Path to file on stage: @compliance_attachments/...
+    file_size_kb    INTEGER,
+    uploaded_at     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    
+    -- For demo purposes: text description of image content
+    -- In production, CORTEX.COMPLETE would analyze actual image bytes
+    image_description TEXT
 );
 
 -- =============================================================================
--- SAMPLE DATA: 5 emails (including non-English for AI_TRANSLATE demo)
+-- SAMPLE EMAILS
 -- =============================================================================
 
-INSERT INTO compliance_emails 
-    (sender, recipient, subject, email_content, original_language, trader_id, department, compliance_flag)
-VALUES
-    -- Email 1: German - Suspicious insider trading
-    ('hans.mueller@external.de',
+INSERT INTO compliance_emails VALUES
+    -- Email 1: German - Insider trading (tests AI_TRANSLATE)
+    (1,
+     'hans.mueller@external.de',
      'john.smith@acmefinance.com',
      'Vertrauliche Information - Dringend',
      'Ich habe vertrauliche Informationen über die bevorstehende Fusion zwischen TechCorp und MegaSoft erhalten. Die Ankündigung erfolgt am Montag vor Börseneröffnung. Wir sollten schnell handeln und unsere Positionen entsprechend anpassen. Bitte diese Information nicht weitergeben.',
-     'de',
+     FALSE,
      'TRADER_001',
      'Trading',
-     TRUE),
+     CURRENT_TIMESTAMP()),
 
-    -- Email 2: English - Clear insider trading
-    ('sarah.jones@acmefinance.com',
+    -- Email 2: English - Insider trading WITH ATTACHMENT
+    (2,
+     'sarah.jones@acmefinance.com',
      'mike.chen@acmefinance.com',
-     'RE: AAPL Position',
-     'Hey Mike, just got off the phone with my contact at Apple. They''re announcing earnings beat tomorrow - way above consensus. We should load up on calls before close today. Don''t tell anyone else on the desk.',
-     'en',
+     'RE: AAPL Position - See Attached Analysis',
+     'Hey Mike, just got off the phone with my contact at Apple. They are announcing earnings beat tomorrow - way above consensus. I ran the numbers in the attached spreadsheet. We should load up on calls before close today. Don''t tell anyone else on the desk. Delete this after reading.',
+     TRUE,
      'TRADER_002',
      'Trading',
-     TRUE),
+     CURRENT_TIMESTAMP()),
 
-    -- Email 3: English - Market manipulation
-    ('trading.desk@acmefinance.com',
+    -- Email 3: English - Market manipulation WITH SCREENSHOT
+    (3,
+     'trading.desk@acmefinance.com',
      'group-traders@acmefinance.com',
-     'Coordinated Trading Strategy - URGENT',
-     'Team, let''s coordinate our NVDA trades today. Everyone buy at 10:15 AM sharp to push the price up, then we''ll sell into the momentum around 2 PM. Target is $15 profit per share. Delete this email after reading.',
-     'en',
+     'URGENT: Coordinated Strategy - Screenshot of Setup',
+     'Team, let''s coordinate our NVDA trades today. I''ve attached a screenshot of the order entry system with the timing. Everyone buy at 10:15 AM sharp to push the price up, then we sell into the momentum around 2 PM. Target is $15 profit per share. Delete this email and the screenshot after viewing.',
+     TRUE,
      'TRADER_003',
      'Trading',
-     TRUE),
+     CURRENT_TIMESTAMP()),
 
-    -- Email 4: English - Clean/normal
-    ('compliance@acmefinance.com',
+    -- Email 4: English - Clean/normal (no attachment)
+    (4,
+     'compliance@acmefinance.com',
      'all-staff@acmefinance.com',
      'Q4 Compliance Training Reminder',
-     'This is a reminder that all employees must complete the mandatory Q4 compliance training by December 15th. The training covers updated regulations on insider trading prevention, client data protection, and communications monitoring. Please access the training portal through the company intranet.',
-     'en',
+     'This is a reminder that all employees must complete the mandatory Q4 compliance training by December 15th. The training covers updated regulations on insider trading prevention, client data protection, and communications monitoring. Please access the training portal through the company intranet. Thank you for your cooperation.',
+     FALSE,
      NULL,
      'Compliance',
-     FALSE),
+     CURRENT_TIMESTAMP()),
 
-    -- Email 5: French - Data exfiltration
-    ('pierre.dubois@acmefinance.com',
+    -- Email 5: French - Data exfiltration WITH ARCHITECTURE DIAGRAM
+    (5,
+     'pierre.dubois@acmefinance.com',
      'external.consultant@gmail.com',
-     'Documents demandés',
-     'Voici les fichiers clients que vous avez demandés. J''ai inclus les numéros de compte, les soldes et les informations personnelles. Veuillez les supprimer après utilisation car je ne devrais pas partager ces données en dehors de l''entreprise.',
-     'fr',
+     'Documents demandés - Architecture interne',
+     'Voici les fichiers que vous avez demandés. J''ai inclus notre diagramme d''architecture interne montrant tous les systèmes de trading et les connexions aux bourses. Aussi les numéros de compte clients et les soldes. Veuillez les supprimer après utilisation car ces documents sont strictement confidentiels.',
+     TRUE,
      'ANALYST_001',
      'Research',
-     TRUE);
+     CURRENT_TIMESTAMP());
 
--- Historical violations for similarity demo
-INSERT INTO historical_violations (violation_type, email_content, detected_date, resolution)
-VALUES
-    ('insider_trading',
-     'Got a tip from the board meeting - they''re approving the buyback program next week. Load up on shares now before the announcement.',
-     '2024-03-15',
-     'Employee terminated, reported to SEC'),
-     
-    ('market_manipulation',
-     'Let''s all buy XYZ stock at the same time tomorrow morning to drive the price up. Sell at noon.',
-     '2024-06-22',
-     'Trading privileges suspended, formal warning');
+-- =============================================================================
+-- SAMPLE ATTACHMENTS (Stage-based paths)
+-- In production: actual files uploaded to @compliance_attachments
+-- For demo: image_description simulates what the image contains
+-- =============================================================================
 
--- Compliance incidents for aggregation demo
-INSERT INTO compliance_incidents (department, incident_description, incident_date, severity)
-VALUES
-    ('Trading', 'Trader executed personal trades in securities also held in client accounts without proper disclosure.', '2024-09-01', 'HIGH'),
-    ('Trading', 'Suspicious pattern of trades immediately before major announcements. Under investigation.', '2024-09-15', 'CRITICAL'),
-    ('Research', 'Analyst shared draft research report with external party before publication.', '2024-10-01', 'HIGH'),
-    ('Research', 'Failure to maintain information barriers between research and trading desks.', '2024-10-20', 'MEDIUM'),
-    ('Operations', 'Client data accessed without documented business need. Access logs under review.', '2024-11-01', 'HIGH'),
-    ('Operations', 'Delayed suspicious activity report filing - missed 15-day deadline.', '2024-11-10', 'MEDIUM');
+INSERT INTO email_attachments VALUES
+    -- Attachment for Email 2: Spreadsheet with insider analysis
+    (1, 2,
+     'AAPL_Insider_Analysis.xlsx',
+     'spreadsheet',
+     '@compliance_attachments/2024/12/AAPL_Insider_Analysis.xlsx',
+     245,
+     CURRENT_TIMESTAMP(),
+     'Excel spreadsheet showing Apple Inc stock analysis. Contains columns labeled: "Insider Source", "Expected EPS", "Consensus EPS", "Trade Recommendation". A cell is highlighted in yellow showing "BUY BEFORE ANNOUNCEMENT". The footer contains text: "CONFIDENTIAL - DO NOT DISTRIBUTE". There is a chart showing expected stock price movement with an arrow pointing up labeled "Post-Announcement Target".'),
+
+    -- Attachment for Email 3: Screenshot of trading system
+    (2, 3,
+     'order_entry_screenshot.png',
+     'image/png',
+     '@compliance_attachments/2024/12/order_entry_screenshot.png',
+     1024,
+     CURRENT_TIMESTAMP(),
+     'Screenshot of Bloomberg terminal order entry screen. The screen shows a list of pending orders for NVDA (NVIDIA Corporation). All orders have the same entry time of 10:15:00 AM. There are 8 separate order tickets visible, each from a different trader ID. A handwritten red annotation in the corner reads "COORDINATE WITH TEAM - SAME TIME". Trading account numbers are partially visible. The total order value shown is approximately $2.4 million.'),
+
+    -- Attachment for Email 5: Internal architecture diagram
+    (3, 5,
+     'trading_infrastructure_v3.pdf',
+     'application/pdf',
+     '@compliance_attachments/2024/12/trading_infrastructure_v3.pdf',
+     2048,
+     CURRENT_TIMESTAMP(),
+     'Network architecture diagram with title "ACME Finance - Trading Infrastructure v3.0". The diagram shows connections between multiple systems: Internal Trading Engine (IP: 10.0.1.50), NYSE Direct Feed (connection ID visible), NASDAQ Direct Feed, Client Portfolio Database (server name: PROD-DB-01), Risk Management System, and Backup Data Center. AWS account ID "123456789012" is visible in the corner. A large red watermark across the page reads "INTERNAL USE ONLY - NOT FOR EXTERNAL DISTRIBUTION". The document footer shows "Last updated: November 2024 - Classification: HIGHLY CONFIDENTIAL".');
 
 -- =============================================================================
 -- VERIFY SETUP
 -- =============================================================================
 
-SELECT '✓ Setup complete!' AS status;
+SELECT '✅ Setup complete!' AS status;
 
+-- Summary counts
 SELECT 'compliance_emails' AS table_name, COUNT(*) AS rows FROM compliance_emails
-UNION ALL SELECT 'historical_violations', COUNT(*) FROM historical_violations
-UNION ALL SELECT 'compliance_incidents', COUNT(*) FROM compliance_incidents;
+UNION ALL 
+SELECT 'email_attachments', COUNT(*) FROM email_attachments;
 
--- Preview the emails
+-- Preview emails
 SELECT 
     email_id, 
-    original_language AS lang, 
-    sender, 
+    sender,
     subject,
-    LEFT(email_content, 60) || '...' AS preview
-FROM compliance_emails;
+    has_attachment,
+    LEFT(email_content, 50) || '...' AS preview
+FROM compliance_emails
+ORDER BY email_id;
 
+-- Preview attachments with stage paths
+SELECT 
+    a.attachment_id,
+    a.email_id,
+    a.filename,
+    a.file_type,
+    a.stage_path,
+    a.file_size_kb || ' KB' AS size
+FROM email_attachments a;
+
+-- Show which emails have attachments
+SELECT 
+    e.email_id,
+    e.subject,
+    e.has_attachment,
+    a.filename,
+    a.stage_path
+FROM compliance_emails e
+LEFT JOIN email_attachments a ON e.email_id = a.email_id
+ORDER BY e.email_id;

@@ -1,77 +1,93 @@
 # Snowflake GenAI for Financial Services Compliance
 
-A hands-on lab demonstrating Snowflake Cortex AI SQL functions for email communications compliance monitoring.
+A hands-on lab demonstrating Snowflake Cortex AI for email and attachment compliance monitoring.
 
-## Overview
+## Demo Flow — Layered Complexity
 
-This workshop showcases how Frontier LLMs in Snowflake can transform email analysis for compliance teams. All processing stays within Snowflake's security perimeter—no external API calls required.
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Layer 1: BUILDING BLOCKS                                                    │
+│  Learn each function: TRANSLATE → SENTIMENT → CLASSIFY → EXTRACT             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  Layer 2: AISQL APPROACH                                                     │
+│  Full text pipeline using fine-tuned AI SQL functions                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  Layer 3: COMPLETE APPROACH                                                  │
+│  Full text pipeline using CORTEX.COMPLETE + Frontier models                  │
+│  → Then layer in IMAGE ATTACHMENTS (multimodal analysis)                     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  Layer 4: COMPARISON                                                         │
+│  Compare approaches, note COMPLETE handles images where AISQL cannot         │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
 
-## Workshop Structure (60 minutes)
+## Workshop Structure
 
-| Worksheet | Duration | Functions Covered |
-|-----------|----------|-------------------|
-| `00_setup.sql` | 5 min | Database, tables, sample data |
-| `01_classification_filtering.sql` | 15 min | `AI_CLASSIFY`, `AI_FILTER` |
-| `02_extraction_sentiment.sql` | 15 min | `AI_TRANSLATE`, `AI_EXTRACT`, `AI_SENTIMENT` |
-| `03_aggregation_similarity.sql` | 10 min | `AI_AGG`, `AI_EMBED`, `AI_SIMILARITY` |
-| `04_multimodal.sql` | 10 min | `AI_COMPLETE`, `AI_TRANSCRIBE` |
+| Worksheet | Layer | Focus |
+|-----------|-------|-------|
+| `00_setup.sql` | — | Create database, emails, stage-based attachments |
+| `01_building_blocks.sql` | 1 | Learn functions: TRANSLATE → SENTIMENT → CLASSIFY → EXTRACT |
+| `02_aisql_approach.sql` | 2 | Full text pipeline with fine-tuned AI SQL |
+| `03_complete_approach.sql` | 3 | Text pipeline + **image attachments** with Frontier models |
+| `04_comparison.sql` | 4 | Compare approaches, choose your pathway |
 | `99_reset.sql` | — | Cleanup |
+
+## Two Approaches
+
+| Approach | Text Analysis | Image Analysis | Best For |
+|----------|---------------|----------------|----------|
+| **AI SQL** | ✅ TRANSLATE, CLASSIFY, EXTRACT, SENTIMENT | ❌ Not supported | Quick text analysis |
+| **COMPLETE** | ✅ Custom prompts + structured JSON | ✅ Multimodal (Claude) | Full control + images |
+
+**Key insight:** AISQL functions are convenient for text, but **CORTEX.COMPLETE is required for image/attachment analysis**.
+
+## Sample Data
+
+**Emails (5):**
+- 🇩🇪 German email (insider trading)
+- 🇫🇷 French email (data exfiltration)  
+- 🇺🇸 English emails (market manipulation, clean)
+
+**Attachments (3) — stored on stage:**
+| File | Type | Content |
+|------|------|---------|
+| `@stage/AAPL_Insider_Analysis.xlsx` | Spreadsheet | "BUY BEFORE ANNOUNCEMENT" |
+| `@stage/order_entry_screenshot.png` | Screenshot | Trading system with coordination notes |
+| `@stage/trading_infrastructure.pdf` | Diagram | Internal architecture, IPs, "NOT FOR EXTERNAL" |
+
+## Violation Levels
+
+| Level | Description |
+|-------|-------------|
+| `CRITICAL` | Clear policy violation, immediate escalation |
+| `SENSITIVE` | Contains confidential information |
+| `POTENTIALLY_SENSITIVE` | Warrants review |
+| `CLEAN` | No concerns |
+
+## Functions Covered
+
+| Function | Layer | Purpose |
+|----------|-------|---------|
+| `AI_TRANSLATE` | 1-2 | Auto-detect and translate languages |
+| `AI_SENTIMENT` | 1-2 | Score emotional tone (-1 to +1) |
+| `AI_CLASSIFY` | 1-2 | Categorize into violation types |
+| `AI_EXTRACT` | 1-2 | Pull specific violating phrases |
+| `CORTEX.COMPLETE` | 3 | Text + **image analysis** with Frontier models |
 
 ## Quick Start
 
 1. Open Snowflake Worksheets
-2. Copy/paste `worksheets/00_setup.sql` and run
-3. Proceed through worksheets 01–04 in order
-4. Run `99_reset.sql` to clean up when done
-
-## Project Structure
-
-```
-├── worksheets/
-│   ├── 00_setup.sql                  # Create database & sample data
-│   ├── 01_classification_filtering.sql
-│   ├── 02_extraction_sentiment.sql
-│   ├── 03_aggregation_similarity.sql
-│   ├── 04_multimodal.sql
-│   └── 99_reset.sql                  # Cleanup script
-└── README.md
-```
-
-## AI SQL Functions Covered
-
-| Function | Use Case |
-|----------|----------|
-| `AI_CLASSIFY` | Categorize emails (insider trading, market manipulation, etc.) |
-| `AI_FILTER` | Natural language yes/no filtering |
-| `AI_TRANSLATE` | Handle international communications |
-| `AI_EXTRACT` | Pull entities: securities, dates, parties |
-| `AI_SENTIMENT` | Risk sentiment scoring (-1 to +1) |
-| `AI_AGG` | Summarize across groups (e.g., by department) |
-| `AI_EMBED` | Create vector embeddings |
-| `AI_SIMILARITY` | Find patterns matching historical violations |
-| `AI_COMPLETE` | Custom LLM prompts, structured outputs |
-| `AI_TRANSCRIBE` | Speech-to-text for recorded calls |
-
-## Sample Data
-
-The setup script creates 5 synthetic emails:
-- 🇩🇪 German email (insider trading) — for `AI_TRANSLATE` demo
-- 🇫🇷 French email (data exfiltration) — for `AI_TRANSLATE` demo
-- 🇺🇸 English emails (various compliance scenarios)
-
-Plus supporting tables for historical violations and compliance incidents.
+2. Run `00_setup.sql` to create database and sample data
+3. Follow worksheets `01` → `02` → `03` → `04` in order
+4. Run `99_reset.sql` to clean up
 
 ## Prerequisites
 
-- Snowflake account with Cortex AI SQL functions enabled
-- Role with `CREATE DATABASE` privileges (or use existing database)
-- Warehouse access
+- Snowflake account with Cortex AI enabled
+- Role with `CREATE DATABASE` and `CREATE STAGE` privileges
 
 ## Resources
 
-- [Cortex AI SQL Documentation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql)
-- [Available LLMs](https://docs.snowflake.com/en/user-guide/snowflake-cortex/llm-functions#availability): Claude, Llama, Mistral, Snowflake Arctic
-
-## License
-
-Internal demo use only.
+- [Cortex AI SQL Functions](https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql)
+- [Cortex LLM Functions](https://docs.snowflake.com/en/user-guide/snowflake-cortex/llm-functions)
+- [Cortex Multimodal](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-multimodal)
