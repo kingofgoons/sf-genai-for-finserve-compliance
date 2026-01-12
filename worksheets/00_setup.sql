@@ -1,17 +1,30 @@
 -- =============================================================================
--- Sample Email Dataset for GenAI Compliance Demo
--- Demonstrates: AI SQL functions for email communications monitoring
--- Note: Start with <5 emails, including non-English for AI_TRANSLATE demo
+-- 00_SETUP.SQL
+-- Snowflake GenAI for Financial Services Compliance - Hands-on Lab
+-- 
+-- This worksheet creates the database, schema, and sample data for the demo.
+-- Run this FIRST before proceeding to other worksheets.
 -- =============================================================================
 
--- Create demo database and schema (idempotent)
+-- Set context
+USE ROLE ACCOUNTADMIN;  -- Or a role with CREATE DATABASE privileges
+
+-- Create demo database and schema
 CREATE DATABASE IF NOT EXISTS GENAI_COMPLIANCE_DEMO;
 USE DATABASE GENAI_COMPLIANCE_DEMO;
 CREATE SCHEMA IF NOT EXISTS PUBLIC;
 USE SCHEMA PUBLIC;
 
+-- Create warehouse if needed (adjust size as appropriate)
+CREATE WAREHOUSE IF NOT EXISTS GENAI_HOL_WH
+    WAREHOUSE_SIZE = 'XSMALL'
+    AUTO_SUSPEND = 60
+    AUTO_RESUME = TRUE;
+
+USE WAREHOUSE GENAI_HOL_WH;
+
 -- =============================================================================
--- Core Tables
+-- TABLES
 -- =============================================================================
 
 -- Main email table for compliance monitoring
@@ -26,17 +39,6 @@ CREATE OR REPLACE TABLE compliance_emails (
     department          VARCHAR(100),
     ingestion_timestamp TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
     compliance_flag     BOOLEAN DEFAULT FALSE
-);
-
--- Email attachments for multimodal demo
-CREATE OR REPLACE TABLE email_attachments (
-    attachment_id   INTEGER AUTOINCREMENT PRIMARY KEY,
-    email_id        INTEGER REFERENCES compliance_emails(email_id),
-    filename        VARCHAR(255),
-    file_type       VARCHAR(50),
-    file_size_kb    INTEGER,
-    attachment_url  VARCHAR(1000),  -- Stage URL for actual files
-    created_at      TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
 -- Historical violations for similarity matching
@@ -57,23 +59,14 @@ CREATE OR REPLACE TABLE compliance_incidents (
     severity            VARCHAR(20)
 );
 
--- Recorded calls for transcription demo
-CREATE OR REPLACE TABLE recorded_calls (
-    call_id     INTEGER AUTOINCREMENT PRIMARY KEY,
-    trader_id   VARCHAR(50),
-    call_date   DATE,
-    duration_sec INTEGER,
-    audio_file  VARCHAR(1000)  -- Stage URL for audio files
-);
-
 -- =============================================================================
--- Sample Data: Start with <5 emails (per demo plan)
--- First email is non-English to demonstrate AI_TRANSLATE
+-- SAMPLE DATA: 5 emails (including non-English for AI_TRANSLATE demo)
 -- =============================================================================
 
-INSERT INTO compliance_emails (sender, recipient, subject, email_content, original_language, trader_id, department, compliance_flag)
+INSERT INTO compliance_emails 
+    (sender, recipient, subject, email_content, original_language, trader_id, department, compliance_flag)
 VALUES
-    -- Email 1: German (for AI_TRANSLATE demo) - Suspicious
+    -- Email 1: German - Suspicious insider trading
     ('hans.mueller@external.de',
      'john.smith@acmefinance.com',
      'Vertrauliche Information - Dringend',
@@ -93,7 +86,7 @@ VALUES
      'Trading',
      TRUE),
 
-    -- Email 3: English - Market manipulation discussion
+    -- Email 3: English - Market manipulation
     ('trading.desk@acmefinance.com',
      'group-traders@acmefinance.com',
      'Coordinated Trading Strategy - URGENT',
@@ -103,7 +96,7 @@ VALUES
      'Trading',
      TRUE),
 
-    -- Email 4: English - Clean/normal business email
+    -- Email 4: English - Clean/normal
     ('compliance@acmefinance.com',
      'all-staff@acmefinance.com',
      'Q4 Compliance Training Reminder',
@@ -113,7 +106,7 @@ VALUES
      'Compliance',
      FALSE),
 
-    -- Email 5: French - Data exfiltration concern
+    -- Email 5: French - Data exfiltration
     ('pierre.dubois@acmefinance.com',
      'external.consultant@gmail.com',
      'Documents demandés',
@@ -123,31 +116,20 @@ VALUES
      'Research',
      TRUE);
 
--- =============================================================================
--- Sample Historical Violations (for AI_SIMILARITY demo)
--- =============================================================================
-
+-- Historical violations for similarity demo
 INSERT INTO historical_violations (violation_type, email_content, detected_date, resolution)
 VALUES
     ('insider_trading',
      'Got a tip from the board meeting - they''re approving the buyback program next week. Load up on shares now before the announcement.',
      '2024-03-15',
      'Employee terminated, reported to SEC'),
-
+     
     ('market_manipulation',
      'Let''s all buy XYZ stock at the same time tomorrow morning to drive the price up. Sell at noon.',
      '2024-06-22',
-     'Trading privileges suspended, formal warning'),
+     'Trading privileges suspended, formal warning');
 
-    ('data_exfiltration',
-     'Sending you the client list with all their portfolio details. Use your personal email so IT doesn''t flag it.',
-     '2024-08-10',
-     'Employee terminated, legal review initiated');
-
--- =============================================================================
--- Sample Compliance Incidents (for AI_AGG demo)
--- =============================================================================
-
+-- Compliance incidents for aggregation demo
 INSERT INTO compliance_incidents (department, incident_description, incident_date, severity)
 VALUES
     ('Trading', 'Trader executed personal trades in securities also held in client accounts without proper disclosure.', '2024-09-01', 'HIGH'),
@@ -158,31 +140,21 @@ VALUES
     ('Operations', 'Delayed suspicious activity report filing - missed 15-day deadline.', '2024-11-10', 'MEDIUM');
 
 -- =============================================================================
--- Sample Attachments (metadata only - actual files would be in a stage)
+-- VERIFY SETUP
 -- =============================================================================
 
-INSERT INTO email_attachments (email_id, filename, file_type, file_size_kb, attachment_url)
-VALUES
-    (2, 'AAPL_Analysis.xlsx', 'spreadsheet', 245, '@compliance_stage/attachments/aapl_analysis.xlsx'),
-    (3, 'trading_schedule.pdf', 'document', 128, '@compliance_stage/attachments/trading_schedule.pdf'),
-    (5, 'client_export.csv', 'data', 1024, '@compliance_stage/attachments/client_export.csv');
+SELECT '✓ Setup complete!' AS status;
 
--- =============================================================================
--- Verify data loaded
--- =============================================================================
+SELECT 'compliance_emails' AS table_name, COUNT(*) AS rows FROM compliance_emails
+UNION ALL SELECT 'historical_violations', COUNT(*) FROM historical_violations
+UNION ALL SELECT 'compliance_incidents', COUNT(*) FROM compliance_incidents;
 
-SELECT 'compliance_emails' AS table_name, COUNT(*) AS row_count FROM compliance_emails
-UNION ALL
-SELECT 'historical_violations', COUNT(*) FROM historical_violations
-UNION ALL
-SELECT 'compliance_incidents', COUNT(*) FROM compliance_incidents
-UNION ALL
-SELECT 'email_attachments', COUNT(*) FROM email_attachments;
-
--- Preview emails
-SELECT email_id, original_language, sender, subject, LEFT(email_content, 80) || '...' AS preview
-FROM compliance_emails
-LIMIT 5;
-
-COMMENT ON TABLE compliance_emails IS 'Sample compliance emails for GenAI demo - synthetic data only';
+-- Preview the emails
+SELECT 
+    email_id, 
+    original_language AS lang, 
+    sender, 
+    subject,
+    LEFT(email_content, 60) || '...' AS preview
+FROM compliance_emails;
 
