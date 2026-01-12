@@ -182,6 +182,89 @@ FROM complete_attachment_analysis
 ORDER BY analysis:confidence::NUMBER DESC;
 
 -- =============================================================================
+-- REAL IMAGE ANALYSIS (Using actual files from stage)
+-- Upload files to @compliance_attachments stage first
+-- =============================================================================
+
+/*
+PRODUCTION APPROACH: Analyze actual image bytes using GET_PRESIGNED_URL()
+
+First, upload your files to the stage:
+    PUT file:///path/to/order_entry_screenshot.png @compliance_attachments/2024/12/;
+    PUT file:///path/to/AAPL_Analysis.png @compliance_attachments/2024/12/;
+    PUT file:///path/to/ACME.Finance.Trading.Infra.png @compliance_attachments/2024/12/;
+
+Then analyze with COMPLETE:
+*/
+
+-- Example: Analyze a real screenshot from the stage
+-- Uncomment and run after uploading files to stage
+/*
+SELECT 
+    'order_entry_screenshot.png' AS filename,
+    PARSE_JSON(
+        SNOWFLAKE.CORTEX.COMPLETE(
+            'claude-sonnet-4-5',
+            'You are a data security analyst. Analyze this screenshot for compliance concerns.
+            
+Return JSON: {
+    "violation_type": "<data_leak|insider_info|credential_exposure|unauthorized_sharing|clean>",
+    "severity": "<CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN>",
+    "confidence": <0-100>,
+    "what_is_visible": ["<item 1>", "<item 2>"],
+    "concerns": ["<concern 1>", "<concern 2>"],
+    "recommended_action": "<block|quarantine|review|allow>"
+}',
+            GET_PRESIGNED_URL(@compliance_attachments, '2024/12/order_entry_screenshot.png')
+        )
+    ) AS image_analysis;
+*/
+
+-- Example: Analyze architecture diagram
+/*
+SELECT 
+    'ACME.Finance.Trading.Infra.png' AS filename,
+    PARSE_JSON(
+        SNOWFLAKE.CORTEX.COMPLETE(
+            'claude-sonnet-4-5',
+            'Analyze this architecture diagram for security concerns. 
+            Look for: exposed IPs, server names, credentials, internal-only markings.
+            
+Return JSON: {
+    "violation_type": "...",
+    "severity": "...",
+    "exposed_info": ["<what sensitive info is visible>"],
+    "external_sharing_safe": true/false,
+    "reasoning": "..."
+}',
+            GET_PRESIGNED_URL(@compliance_attachments, '2024/12/ACME.Finance.Trading.Infra.png')
+        )
+    ) AS diagram_analysis;
+*/
+
+-- Example: Analyze Excel screenshot
+/*
+SELECT 
+    'AAPL_Analysis.png' AS filename,
+    PARSE_JSON(
+        SNOWFLAKE.CORTEX.COMPLETE(
+            'claude-sonnet-4-5',
+            'Analyze this spreadsheet screenshot for insider trading indicators.
+            Look for: insider sources, non-public information, trade recommendations.
+            
+Return JSON: {
+    "violation_type": "...",
+    "severity": "...",
+    "insider_indicators": ["<indicator 1>", "<indicator 2>"],
+    "securities_mentioned": ["<ticker>"],
+    "recommended_action": "..."
+}',
+            GET_PRESIGNED_URL(@compliance_attachments, '2024/12/AAPL_Analysis.png')
+        )
+    ) AS spreadsheet_analysis;
+*/
+
+-- =============================================================================
 -- COMBINED DASHBOARD
 -- =============================================================================
 
