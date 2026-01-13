@@ -220,39 +220,46 @@ Verify upload:
 */
 
 -- Analyze trading system screenshot
+-- Use AI_COMPLETE with TO_FILE() for multimodal (image) analysis
 SELECT 
     'order_entry_screenshot.png' AS filename,
-    SNOWFLAKE.CORTEX.COMPLETE(
+    AI_COMPLETE(
         'claude-sonnet-4-5',
-        'You are a compliance analyst. Analyze this trading system screenshot.
-        Look for: coordinated trading evidence, suspicious annotations, visible account numbers.
-        
+        PROMPT(
+            'You are a compliance analyst. Analyze this trading system screenshot.
+            Look for: coordinated trading evidence, suspicious annotations, visible account numbers.
+            
 Return JSON: {"violation_type": "...", "severity": "CRITICAL|SENSITIVE|CLEAN", "concerns": [...], "action": "..."}',
-        GET_PRESIGNED_URL(@compliance_attachments, '2024/12/order_entry_screenshot.png')
+            TO_FILE(@compliance_attachments, '2024/12/order_entry_screenshot.png')
+        )
     ) AS analysis;
 
 -- Analyze architecture diagram for data leak risk
 SELECT 
     'ACME.Finance.Trading.Infra.png' AS filename,
-    SNOWFLAKE.CORTEX.COMPLETE(
+    AI_COMPLETE(
         'claude-sonnet-4-5',
-        'Analyze this architecture diagram for security concerns.
-        Look for: exposed IPs, server names, credentials, internal-only markings.
-        
+        PROMPT(
+            'Analyze this architecture diagram for security concerns.
+            Look for: exposed IPs, server names, credentials, internal-only markings.
+            
 Return JSON: {"violation_type": "...", "severity": "...", "exposed_info": [...], "safe_for_external": true/false}',
-        GET_PRESIGNED_URL(@compliance_attachments, '2024/12/ACME.Finance.Trading.Infra.png')
+            TO_FILE(@compliance_attachments, '2024/12/ACME.Finance.Trading.Infra.png')
+        )
     ) AS analysis;
 
 -- Analyze Excel screenshot for insider trading indicators
 SELECT 
     'AAPL_Analysis.png' AS filename,
-    SNOWFLAKE.CORTEX.COMPLETE(
+    AI_COMPLETE(
         'claude-sonnet-4-5',
-        'Analyze this spreadsheet screenshot for insider trading indicators.
-        Look for: insider sources, non-public information, trade recommendations.
-        
+        PROMPT(
+            'Analyze this spreadsheet screenshot for insider trading indicators.
+            Look for: insider sources, non-public information, trade recommendations.
+            
 Return JSON: {"violation_type": "...", "severity": "...", "insider_indicators": [...], "securities": [...]}',
-        GET_PRESIGNED_URL(@compliance_attachments, '2024/12/AAPL_Analysis.png')
+            TO_FILE(@compliance_attachments, '2024/12/AAPL_Analysis.png')
+        )
     ) AS analysis;
 
 -- =============================================================================
