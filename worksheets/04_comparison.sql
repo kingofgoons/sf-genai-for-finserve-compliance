@@ -140,9 +140,8 @@ SELECT
     
     -- Use AI_TRANSLATE (efficient, purpose-built)
     CASE 
-        WHEN e.email_id = 1 THEN 'German → English'
-        WHEN e.email_id = 5 THEN 'French → English'
-        ELSE 'English'
+        WHEN e.lang != 'en' THEN e.lang || ' → en'
+        ELSE 'English (no translation)'
     END AS translation_handled_by_aisql,
     
     -- Use COMPLETE for analysis (powerful, flexible)
@@ -152,8 +151,7 @@ SELECT
             'Quick compliance check. Return JSON: {"risk": "high/medium/low", "reason": "..."}
             
             Email: ' || CASE 
-                WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-                WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
                 ELSE e.email_content
             END
         )

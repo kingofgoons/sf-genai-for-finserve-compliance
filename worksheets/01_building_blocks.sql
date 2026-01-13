@@ -11,39 +11,48 @@ USE SCHEMA PUBLIC;
 USE WAREHOUSE GENAI_HOL_WH;
 
 -- =============================================================================
--- STEP 1: AI_TRANSLATE
--- Start here - we have international communications to analyze
+-- STEP 1: DETECT LANGUAGE
+-- First, we need to identify which emails are not in English
+-- Use CORTEX.COMPLETE to detect language and update the lang column
 -- =============================================================================
 
--- First, see our non-English emails
-SELECT email_id, sender, subject, LEFT(email_content, 80) || '...' AS preview
-FROM compliance_emails
-WHERE email_id IN (1, 5);
+-- Detect language for each email and update the lang column
+UPDATE compliance_emails
+SET lang = TRIM(SNOWFLAKE.CORTEX.COMPLETE(
+    'claude-sonnet-4-5',
+    'What language is this text written in? Reply with ONLY the 2-letter ISO language code (en, de, fr, es, etc). No other text.
 
--- Translate German email to English
-SELECT 
-    email_id,
-    sender,
-    subject,
-    'German → English' AS translation,
-    AI_TRANSLATE(email_content, 'de', 'en') AS english_content
-FROM compliance_emails
-WHERE email_id = 1;
+Text: ' || LEFT(email_content, 200)
+));
 
--- Translate French email to English
-SELECT 
-    email_id,
-    sender,
-    subject,
-    'French → English' AS translation,
-    AI_TRANSLATE(email_content, 'fr', 'en') AS english_content
+-- Verify language detection
+SELECT email_id, sender, subject, lang, LEFT(email_content, 50) || '...' AS preview
 FROM compliance_emails
-WHERE email_id = 5;
-
--- Now we can analyze all emails in English!
+ORDER BY email_id;
 
 -- =============================================================================
--- STEP 2: AI_SENTIMENT
+-- STEP 2: AI_TRANSLATE
+-- Now use the lang column to identify and translate non-English emails
+-- =============================================================================
+
+-- View non-English emails (using the detected lang column)
+SELECT email_id, lang, sender, subject, LEFT(email_content, 80) || '...' AS preview
+FROM compliance_emails
+WHERE lang != 'en';
+
+-- Translate non-English emails to English
+SELECT 
+    email_id,
+    lang,
+    sender,
+    subject,
+    lang || ' → en' AS translation,
+    AI_TRANSLATE(email_content, lang, 'en') AS english_content
+FROM compliance_emails
+WHERE lang != 'en';
+
+-- =============================================================================
+-- STEP 3: AI_SENTIMENT
 -- Score emotional tone: -1 (negative) to +1 (positive)
 -- Unusual sentiment can indicate stress, urgency, or deception
 -- =============================================================================
@@ -53,45 +62,40 @@ SELECT
     email_id,
     sender,
     subject,
+    lang,
     ROUND(AI_SENTIMENT(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END
     ), 2) AS sentiment_score,
     CASE 
-        WHEN AI_SENTIMENT(CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
-            ELSE email_content END) < -0.3 THEN '🔴 Negative - Review'
-        WHEN AI_SENTIMENT(CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
-            ELSE email_content END) > 0.5 THEN '🟢 Positive'
+        WHEN AI_SENTIMENT(
+            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END
+        ) < -0.3 THEN '🔴 Negative - Review'
+        WHEN AI_SENTIMENT(
+            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END
+        ) > 0.5 THEN '🟢 Positive'
         ELSE '🟡 Neutral'
     END AS tone
 FROM compliance_emails
 ORDER BY sentiment_score;
 
--- Notice: Email 4 (compliance training) is positive
--- Suspicious emails tend to have mixed or urgent tones
-
 -- =============================================================================
--- STEP 3: AI_CLASSIFY
+-- STEP 4: AI_CLASSIFY
 -- Categorize emails into violation types
 -- Zero-shot: define categories, get predictions immediately
 -- =============================================================================
 
--- Classify all emails (with translation)
+-- Classify all emails (with translation for non-English)
 SELECT 
     email_id,
     sender,
     subject,
+    lang,
     AI_CLASSIFY(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
@@ -102,18 +106,17 @@ FROM compliance_emails;
 SELECT 
     email_id,
     subject,
+    lang,
     AI_CLASSIFY(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
     ):class::STRING AS violation_type,
     ROUND(AI_CLASSIFY(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
@@ -122,7 +125,7 @@ FROM compliance_emails
 ORDER BY confidence DESC;
 
 -- =============================================================================
--- STEP 4: AI_EXTRACT
+-- STEP 5: AI_EXTRACT
 -- Pull out SPECIFIC phrases that are compliance violations
 -- This is key evidence for investigations
 -- =============================================================================
@@ -131,16 +134,19 @@ ORDER BY confidence DESC;
 SELECT 
     email_id,
     subject,
+    lang,
     AI_EXTRACT(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         'What specific phrases indicate a compliance violation or policy breach?'
     ) AS violating_phrases
 FROM compliance_emails
-WHERE email_id != 4;  -- Skip the clean email
+WHERE AI_CLASSIFY(
+    CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+    ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
+):class::STRING != 'clean';
 
 -- Extract more specific information
 SELECT 
@@ -148,45 +154,42 @@ SELECT
     subject,
     AI_EXTRACT(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         'What securities, companies, or financial instruments are mentioned?'
     ) AS securities_mentioned,
     AI_EXTRACT(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         'What instructions to hide, delete, or keep secret are given?'
     ) AS concealment_instructions
 FROM compliance_emails
-WHERE email_id IN (2, 3, 5);  -- Suspicious emails only
+WHERE lang != 'en' OR has_attachment = TRUE;  -- Focus on suspicious emails
 
 -- =============================================================================
--- STEP 5: PUT THEM ALL TOGETHER
--- Combined analysis using all four functions
+-- STEP 6: PUT THEM ALL TOGETHER
+-- Combined analysis using all functions
 -- =============================================================================
 
 SELECT 
     email_id,
     sender,
     subject,
+    lang,
     
     -- Translated content (for reference)
     LEFT(CASE 
-        WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-        WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+        WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
         ELSE email_content
     END, 100) || '...' AS content_preview,
     
     -- Sentiment
     ROUND(AI_SENTIMENT(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END
     ), 2) AS sentiment,
@@ -194,8 +197,7 @@ SELECT
     -- Classification
     AI_CLASSIFY(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
@@ -204,8 +206,7 @@ SELECT
     -- Key evidence
     AI_EXTRACT(
         CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
+            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
         'What is the single most concerning phrase in this email?'
@@ -214,11 +215,7 @@ SELECT
 FROM compliance_emails
 ORDER BY 
     CASE AI_CLASSIFY(
-        CASE 
-            WHEN email_id = 1 THEN AI_TRANSLATE(email_content, 'de', 'en')
-            WHEN email_id = 5 THEN AI_TRANSLATE(email_content, 'fr', 'en')
-            ELSE email_content
-        END,
+        CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
     ):class::STRING
         WHEN 'clean' THEN 4
@@ -232,10 +229,13 @@ ORDER BY
 /*
 We've learned the building blocks:
 
-1. AI_TRANSLATE - Handle international communications
-2. AI_SENTIMENT - Flag unusual emotional tones  
-3. AI_CLASSIFY  - Categorize violation types
-4. AI_EXTRACT   - Pull specific violating phrases as evidence
+1. CORTEX.COMPLETE - Detect language (stored in lang column)
+2. AI_TRANSLATE    - Translate non-English emails using the lang column
+3. AI_SENTIMENT    - Flag unusual emotional tones  
+4. AI_CLASSIFY     - Categorize violation types
+5. AI_EXTRACT      - Pull specific violating phrases as evidence
+
+The lang column lets us dynamically handle any language without hardcoding!
 
 These are FINE-TUNED models optimized for each specific task.
 They're fast and convenient.
@@ -243,4 +243,3 @@ They're fast and convenient.
 Next: See the full AISQL pipeline → 02_aisql_approach.sql
 Then: Compare with CORTEX.COMPLETE + Frontier models → 03_complete_approach.sql
 */
-

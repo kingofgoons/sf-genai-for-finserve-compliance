@@ -23,18 +23,16 @@ SELECT
     e.subject,
     e.has_attachment,
     
-    -- Step 1: Translate to English
+    -- Step 1: Translate to English (using detected lang column)
     CASE 
-        WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-        WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+        WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
         ELSE e.email_content
     END AS english_content,
     
     -- Step 2: Sentiment analysis
     ROUND(AI_SENTIMENT(
         CASE 
-            WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-            WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END
     ), 2) AS sentiment_score,
@@ -42,8 +40,7 @@ SELECT
     -- Step 3: Classification
     AI_CLASSIFY(
         CASE 
-            WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-            WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
@@ -51,8 +48,7 @@ SELECT
     
     AI_CLASSIFY(
         CASE 
-            WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-            WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
@@ -61,8 +57,7 @@ SELECT
     -- Step 4: Extract evidence
     AI_EXTRACT(
         CASE 
-            WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-            WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
         'What specific phrases indicate a policy violation?'
@@ -70,8 +65,7 @@ SELECT
     
     AI_EXTRACT(
         CASE 
-            WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-            WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
         'What securities or companies are mentioned?'
@@ -81,16 +75,14 @@ SELECT
     CASE 
         WHEN AI_CLASSIFY(
             CASE 
-                WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-                WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
                 ELSE e.email_content
             END,
             ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
         ):class::STRING IN ('insider_trading', 'market_manipulation') THEN 'CRITICAL'
         WHEN AI_CLASSIFY(
             CASE 
-                WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-                WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
                 ELSE e.email_content
             END,
             ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
@@ -102,8 +94,7 @@ SELECT
     CASE 
         WHEN AI_CLASSIFY(
             CASE 
-                WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-                WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
                 ELSE e.email_content
             END,
             ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']

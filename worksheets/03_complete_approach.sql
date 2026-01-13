@@ -36,10 +36,9 @@ SELECT
     e.subject,
     e.has_attachment,
     
-    -- Translate if needed (still use AI_TRANSLATE for this - it's efficient)
+    -- Translate if needed (using detected lang column)
     CASE 
-        WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-        WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+        WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
         ELSE e.email_content
     END AS english_content,
     
@@ -75,8 +74,7 @@ Subject: ' || e.subject || '
 
 Body:
 ' || CASE 
-    WHEN e.email_id = 1 THEN AI_TRANSLATE(e.email_content, 'de', 'en')
-    WHEN e.email_id = 5 THEN AI_TRANSLATE(e.email_content, 'fr', 'en')
+    WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
     ELSE e.email_content
 END || '
 

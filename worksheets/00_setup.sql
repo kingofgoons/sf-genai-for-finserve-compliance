@@ -40,6 +40,7 @@ CREATE OR REPLACE TABLE compliance_emails (
     recipient           VARCHAR(200),
     subject             VARCHAR(500),
     email_content       TEXT,
+    lang                VARCHAR(10),  -- Detected language code (en, de, fr, etc.)
     has_attachment      BOOLEAN DEFAULT FALSE,
     trader_id           VARCHAR(50),
     department          VARCHAR(100),
@@ -65,13 +66,16 @@ CREATE OR REPLACE TABLE email_attachments (
 -- SAMPLE EMAILS
 -- =============================================================================
 
-INSERT INTO compliance_emails VALUES
+INSERT INTO compliance_emails 
+    (email_id, sender, recipient, subject, email_content, lang, has_attachment, trader_id, department, received_at)
+VALUES
     -- Email 1: German - Insider trading (tests AI_TRANSLATE)
     (1,
      'hans.mueller@external.de',
      'john.smith@acmefinance.com',
      'Vertrauliche Information - Dringend',
      'Ich habe vertrauliche Informationen über die bevorstehende Fusion zwischen TechCorp und MegaSoft erhalten. Die Ankündigung erfolgt am Montag vor Börseneröffnung. Wir sollten schnell handeln und unsere Positionen entsprechend anpassen. Bitte diese Information nicht weitergeben.',
+     NULL,  -- Language will be detected in 01_building_blocks.sql
      FALSE,
      'TRADER_001',
      'Trading',
@@ -83,6 +87,7 @@ INSERT INTO compliance_emails VALUES
      'mike.chen@acmefinance.com',
      'RE: AAPL Position - See Attached Analysis',
      'Hey Mike, just got off the phone with my contact at Apple. They are announcing earnings beat tomorrow - way above consensus. I ran the numbers in the attached spreadsheet. We should load up on calls before close today. Don''t tell anyone else on the desk. Delete this after reading.',
+     NULL,
      TRUE,
      'TRADER_002',
      'Trading',
@@ -94,6 +99,7 @@ INSERT INTO compliance_emails VALUES
      'group-traders@acmefinance.com',
      'URGENT: Coordinated Strategy - Screenshot of Setup',
      'Team, let''s coordinate our NVDA trades today. I''ve attached a screenshot of the order entry system with the timing. Everyone buy at 10:15 AM sharp to push the price up, then we sell into the momentum around 2 PM. Target is $15 profit per share. Delete this email and the screenshot after viewing.',
+     NULL,
      TRUE,
      'TRADER_003',
      'Trading',
@@ -105,6 +111,7 @@ INSERT INTO compliance_emails VALUES
      'all-staff@acmefinance.com',
      'Q4 Compliance Training Reminder',
      'This is a reminder that all employees must complete the mandatory Q4 compliance training by December 15th. The training covers updated regulations on insider trading prevention, client data protection, and communications monitoring. Please access the training portal through the company intranet. Thank you for your cooperation.',
+     NULL,
      FALSE,
      NULL,
      'Compliance',
@@ -116,6 +123,7 @@ INSERT INTO compliance_emails VALUES
      'external.consultant@gmail.com',
      'Documents demandés - Architecture interne',
      'Voici les fichiers que vous avez demandés. J''ai inclus notre diagramme d''architecture interne montrant tous les systèmes de trading et les connexions aux bourses. Aussi les numéros de compte clients et les soldes. Veuillez les supprimer après utilisation car ces documents sont strictement confidentiels.',
+     NULL,
      TRUE,
      'ANALYST_001',
      'Research',
