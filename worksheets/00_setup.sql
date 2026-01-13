@@ -32,8 +32,13 @@ GRANT USAGE ON WAREHOUSE GENAI_HOL_WH TO ROLE GENAI_COMPLIANCE_ROLE;
 -- Grant Cortex AI access (required for AI SQL functions)
 GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE GENAI_COMPLIANCE_ROLE;
 
--- Grant role to current user
-GRANT ROLE GENAI_COMPLIANCE_ROLE TO USER CURRENT_USER;
+-- Grant role to current user (replace <YOUR_USERNAME> or run separately)
+-- Option 1: Replace with your username
+-- GRANT ROLE GENAI_COMPLIANCE_ROLE TO USER your_username;
+
+-- Option 2: Use EXECUTE IMMEDIATE with current user
+SET my_user = CURRENT_USER();
+EXECUTE IMMEDIATE 'GRANT ROLE GENAI_COMPLIANCE_ROLE TO USER ' || $my_user;
 
 -- =============================================================================
 -- SWITCH TO CUSTOM ROLE: All remaining operations use least-privilege
