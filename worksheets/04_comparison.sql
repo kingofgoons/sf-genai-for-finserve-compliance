@@ -6,6 +6,7 @@
 -- Choose the approach that fits YOUR use case.
 -- =============================================================================
 
+USE ROLE GENAI_COMPLIANCE_ROLE;
 USE DATABASE GENAI_COMPLIANCE_DEMO;
 USE SCHEMA PUBLIC;
 USE WAREHOUSE GENAI_HOL_WH;

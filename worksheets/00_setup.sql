@@ -6,18 +6,41 @@
 -- Run this FIRST before other worksheets.
 -- =============================================================================
 
--- Set context
-USE ROLE ACCOUNTADMIN;  -- Or role with CREATE DATABASE
+-- =============================================================================
+-- ACCOUNTADMIN SECTION: Create resources and role (run once)
+-- =============================================================================
+USE ROLE ACCOUNTADMIN;
 
+-- Create database and warehouse
 CREATE DATABASE IF NOT EXISTS GENAI_COMPLIANCE_DEMO;
-USE DATABASE GENAI_COMPLIANCE_DEMO;
-USE SCHEMA PUBLIC;
-
 CREATE WAREHOUSE IF NOT EXISTS GENAI_HOL_WH
     WAREHOUSE_SIZE = 'XSMALL'
     AUTO_SUSPEND = 60
     AUTO_RESUME = TRUE;
 
+-- Create custom role for this demo
+CREATE ROLE IF NOT EXISTS GENAI_COMPLIANCE_ROLE;
+
+-- Grant privileges to custom role
+GRANT USAGE ON DATABASE GENAI_COMPLIANCE_DEMO TO ROLE GENAI_COMPLIANCE_ROLE;
+GRANT USAGE ON SCHEMA GENAI_COMPLIANCE_DEMO.PUBLIC TO ROLE GENAI_COMPLIANCE_ROLE;
+GRANT CREATE TABLE ON SCHEMA GENAI_COMPLIANCE_DEMO.PUBLIC TO ROLE GENAI_COMPLIANCE_ROLE;
+GRANT CREATE VIEW ON SCHEMA GENAI_COMPLIANCE_DEMO.PUBLIC TO ROLE GENAI_COMPLIANCE_ROLE;
+GRANT CREATE STAGE ON SCHEMA GENAI_COMPLIANCE_DEMO.PUBLIC TO ROLE GENAI_COMPLIANCE_ROLE;
+GRANT USAGE ON WAREHOUSE GENAI_HOL_WH TO ROLE GENAI_COMPLIANCE_ROLE;
+
+-- Grant Cortex AI access (required for AI SQL functions)
+GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE GENAI_COMPLIANCE_ROLE;
+
+-- Grant role to current user
+GRANT ROLE GENAI_COMPLIANCE_ROLE TO USER CURRENT_USER;
+
+-- =============================================================================
+-- SWITCH TO CUSTOM ROLE: All remaining operations use least-privilege
+-- =============================================================================
+USE ROLE GENAI_COMPLIANCE_ROLE;
+USE DATABASE GENAI_COMPLIANCE_DEMO;
+USE SCHEMA PUBLIC;
 USE WAREHOUSE GENAI_HOL_WH;
 
 -- =============================================================================

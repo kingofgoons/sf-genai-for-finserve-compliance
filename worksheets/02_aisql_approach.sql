@@ -6,6 +6,7 @@
 -- This worksheet queries the pre-computed AI results for fast analysis.
 -- =============================================================================
 
+USE ROLE GENAI_COMPLIANCE_ROLE;
 USE DATABASE GENAI_COMPLIANCE_DEMO;
 USE SCHEMA PUBLIC;
 USE WAREHOUSE GENAI_HOL_WH;
