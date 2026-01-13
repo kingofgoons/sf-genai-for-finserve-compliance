@@ -1,43 +1,51 @@
 -- =============================================================================
 -- 03_COMPLETE_APPROACH.SQL
--- Full Compliance Pipeline Using CORTEX.COMPLETE + Frontier Models
+-- Full Compliance Pipeline Using AI_COMPLETE + Frontier Models + Structured Outputs
 -- 
--- This approach uses raw CORTEX.COMPLETE with structured outputs.
+-- This approach uses AI_COMPLETE with the response_format parameter to enforce
+-- structured JSON outputs. The schema is passed to the model, not just in the prompt.
 -- Full control, custom schemas, access to Claude/Llama/Mistral.
 -- =============================================================================
 
-USE ROLE GENAI_COMPLIANCE_ROLE;
 USE DATABASE GENAI_COMPLIANCE_DEMO;
 USE SCHEMA PUBLIC;
 USE WAREHOUSE GENAI_HOL_WH;
 
 -- =============================================================================
 -- FRONTIER MODELS AVAILABLE
--- See: https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql#regional-availability
 -- =============================================================================
 
 /*
-CORTEX.COMPLETE supports LLMs from: OpenAI, Anthropic, Meta, Mistral AI, DeepSeek, Google, Reka.
-All models fully hosted in Snowflake - your data never leaves.
-
-AVAILABLE MODELS (check docs for regional availability):
-• openai-gpt-5        - OpenAI flagship
-• claude-sonnet-4-5   - Anthropic (multimodal)
-• gemini-3-pro        - Google 
-• deepseek-r1         - DeepSeek reasoning model
-• llama3.1-405b       - Meta large
-• llama3.1-70b        - Meta medium  
-• llama3.1-8b         - Meta small (fastest)
-• mistral-large2      - Mistral (multilingual)
-• snowflake-arctic    - Snowflake native
-
-Full model list: https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql#choosing-a-model
-Regional availability: https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql#regional-availability
+You have access to the best models:
+• claude-sonnet-4-5   - Anthropic's flagship, excellent reasoning + multimodal
+• llama3.1-70b        - Meta's open model, fast and capable
+• llama3.1-405b       - Meta's largest model
+• mistral-large2      - Strong multilingual capabilities
+• snowflake-arctic    - Snowflake's native model
 */
 
 -- =============================================================================
--- CREATE THE COMPLETE PIPELINE
--- Single call per email with custom JSON schema
+-- STRUCTURED OUTPUT SCHEMA DEFINITIONS
+-- These schemas enforce deterministic JSON responses from the model
+-- =============================================================================
+
+/*
+AI_COMPLETE Structured Outputs enforces JSON schema compliance at the token level.
+Key benefits:
+• No post-processing needed - response always matches schema
+• Reduced hallucination - model can't deviate from structure
+• Seamless integration with downstream systems
+
+Schema rules:
+• Use 'required' field to ensure critical fields are always present
+• Use 'description' field to guide model understanding
+• For complex schemas, use $defs for reusable components
+• Property names: letters, digits, hyphen, underscore only (max 64 chars)
+*/
+
+-- =============================================================================
+-- CREATE THE COMPLETE PIPELINE WITH STRUCTURED OUTPUTS
+-- Single call per email with enforced JSON schema via response_format
 -- =============================================================================
 
 CREATE OR REPLACE VIEW complete_email_analysis AS
@@ -54,29 +62,12 @@ SELECT
         ELSE e.email_content
     END AS english_content,
     
-    -- Full analysis in ONE call with structured output
-    -- Use REGEXP_REPLACE to strip markdown backticks if model includes them
+    -- Full analysis in ONE call with STRUCTURED OUTPUT (response_format parameter)
+    -- The schema is enforced at token generation, not just requested in prompt
     PARSE_JSON(
-        REGEXP_REPLACE(
-            SNOWFLAKE.CORTEX.COMPLETE(
-                'claude-sonnet-4-5',
-                'You are a senior financial services compliance officer. Analyze this email thoroughly.
-
-IMPORTANT: Return ONLY raw JSON. Do NOT wrap in markdown code blocks or backticks.
-
-Return a valid JSON object with this EXACT schema:
-{
-    "violation_type": "<insider_trading|market_manipulation|data_exfiltration|clean>",
-    "severity": "<CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN>",
-    "confidence": <number 0-100>,
-    "sentiment": "<negative|neutral|positive>",
-    "summary": "<15 word max summary of the concern>",
-    "violating_phrases": ["<exact quote 1>", "<exact quote 2>"],
-    "securities_mentioned": ["<ticker or company 1>", "<ticker or company 2>"],
-    "concealment_attempts": "<any instructions to delete, hide, or keep secret>",
-    "recommended_action": "<escalate_immediately|compliance_review|monitor|no_action>",
-    "reasoning": "<brief explanation of your assessment>"
-}
+        AI_COMPLETE(
+            model => 'claude-sonnet-4-5',
+            prompt => 'You are a senior financial services compliance officer. Analyze this email thoroughly.
 
 Severity definitions:
 - CRITICAL: Clear insider trading or market manipulation, immediate escalation
@@ -92,11 +83,63 @@ Body:
 ' || CASE 
     WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
     ELSE e.email_content
-END || '
-
-Return ONLY the JSON object. No markdown, no backticks, no explanation.'
-            ),
-            '^```json\\s*|^```\\s*|\\s*```$', ''  -- Strip markdown code fences
+END,
+            response_format => {
+                'type': 'json',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'violation_type': {
+                            'type': 'string',
+                            'enum': ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+                            'description': 'The type of compliance violation detected'
+                        },
+                        'severity': {
+                            'type': 'string',
+                            'enum': ['CRITICAL', 'SENSITIVE', 'POTENTIALLY_SENSITIVE', 'CLEAN'],
+                            'description': 'Severity level based on violation type and evidence'
+                        },
+                        'confidence': {
+                            'type': 'number',
+                            'description': 'Confidence score from 0 to 100'
+                        },
+                        'sentiment': {
+                            'type': 'string',
+                            'enum': ['negative', 'neutral', 'positive'],
+                            'description': 'Overall emotional tone of the email'
+                        },
+                        'summary': {
+                            'type': 'string',
+                            'description': '15 word max summary of the compliance concern'
+                        },
+                        'violating_phrases': {
+                            'type': 'array',
+                            'items': {'type': 'string'},
+                            'description': 'Exact quotes from the email that indicate violations'
+                        },
+                        'securities_mentioned': {
+                            'type': 'array',
+                            'items': {'type': 'string'},
+                            'description': 'Tickers or company names mentioned'
+                        },
+                        'concealment_attempts': {
+                            'type': 'string',
+                            'description': 'Any instructions to delete, hide, or keep information secret'
+                        },
+                        'recommended_action': {
+                            'type': 'string',
+                            'enum': ['escalate_immediately', 'compliance_review', 'monitor', 'no_action'],
+                            'description': 'Recommended next step for compliance team'
+                        },
+                        'reasoning': {
+                            'type': 'string',
+                            'description': 'Brief explanation of the assessment'
+                        }
+                    },
+                    'required': ['violation_type', 'severity', 'confidence', 'sentiment', 'summary', 
+                                 'violating_phrases', 'securities_mentioned', 'recommended_action', 'reasoning']
+                }
+            }
         )
     ) AS analysis
 
@@ -139,8 +182,8 @@ FROM complete_email_analysis
 WHERE analysis:violation_type::STRING != 'clean';
 
 -- =============================================================================
--- ATTACHMENT ANALYSIS WITH COMPLETE
--- More detailed than AISQL approach
+-- ATTACHMENT ANALYSIS WITH STRUCTURED OUTPUTS
+-- More detailed than AISQL approach with enforced schema
 -- =============================================================================
 
 CREATE OR REPLACE VIEW complete_attachment_analysis AS
@@ -150,27 +193,12 @@ SELECT
     a.filename,
     a.file_type,
     
-    -- Strip markdown backticks if model includes them
     PARSE_JSON(
-        REGEXP_REPLACE(
-            SNOWFLAKE.CORTEX.COMPLETE(
-                'claude-sonnet-4-5',
-                'You are a data security analyst reviewing an email attachment.
+        AI_COMPLETE(
+            model => 'claude-sonnet-4-5',
+            prompt => 'You are a data security analyst reviewing an email attachment.
 
 Analyze this attachment description for security and compliance concerns.
-
-IMPORTANT: Return ONLY raw JSON. Do NOT wrap in markdown code blocks or backticks.
-
-Return a valid JSON object:
-{
-    "violation_type": "<data_leak|insider_info|credential_exposure|pii_exposure|unauthorized_sharing|clean>",
-    "severity": "<CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN>",
-    "confidence": <0-100>,
-    "sensitive_elements": ["<specific item 1>", "<specific item 2>"],
-    "risk_factors": ["<risk 1>", "<risk 2>"],
-    "recommended_action": "<block|quarantine|review|allow>",
-    "reasoning": "<brief explanation>"
-}
 
 Severity guide:
 - CRITICAL: Credentials, internal IPs, or clear policy violation visible
@@ -179,11 +207,50 @@ Severity guide:
 - CLEAN: No security concerns
 
 Attachment: ' || a.filename || ' (' || a.file_type || ')
-Content description: ' || a.image_description || '
-
-Return ONLY the JSON object. No markdown, no backticks.'
-            ),
-            '^```json\\s*|^```\\s*|\\s*```$', ''
+Content description: ' || a.image_description,
+            response_format => {
+                'type': 'json',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'violation_type': {
+                            'type': 'string',
+                            'enum': ['data_leak', 'insider_info', 'credential_exposure', 'pii_exposure', 'unauthorized_sharing', 'clean'],
+                            'description': 'Type of security violation detected'
+                        },
+                        'severity': {
+                            'type': 'string',
+                            'enum': ['CRITICAL', 'SENSITIVE', 'POTENTIALLY_SENSITIVE', 'CLEAN'],
+                            'description': 'Severity level of the security concern'
+                        },
+                        'confidence': {
+                            'type': 'number',
+                            'description': 'Confidence score from 0 to 100'
+                        },
+                        'sensitive_elements': {
+                            'type': 'array',
+                            'items': {'type': 'string'},
+                            'description': 'Specific sensitive items identified in the attachment'
+                        },
+                        'risk_factors': {
+                            'type': 'array',
+                            'items': {'type': 'string'},
+                            'description': 'Risk factors that contributed to the assessment'
+                        },
+                        'recommended_action': {
+                            'type': 'string',
+                            'enum': ['block', 'quarantine', 'review', 'allow'],
+                            'description': 'Recommended action for this attachment'
+                        },
+                        'reasoning': {
+                            'type': 'string',
+                            'description': 'Brief explanation of the security assessment'
+                        }
+                    },
+                    'required': ['violation_type', 'severity', 'confidence', 'sensitive_elements', 
+                                 'risk_factors', 'recommended_action', 'reasoning']
+                }
+            }
         )
     ) AS analysis
 
@@ -204,63 +271,199 @@ FROM complete_attachment_analysis
 ORDER BY analysis:confidence::NUMBER DESC;
 
 -- =============================================================================
--- REAL IMAGE ANALYSIS (Using actual files from stage)
+-- REAL IMAGE ANALYSIS (Using TO_FILE() for stage-based images)
+-- Uses AI_COMPLETE multimodal capability with Claude models
 -- =============================================================================
 
 /*
 PREREQUISITE: Upload attachments to the stage before running these queries.
 
 From SnowSQL or Snowsight file upload:
-    PUT file:///path/to/assets/order_entry_screenshot.png @compliance_attachments/2024/12/;
-    PUT file:///path/to/assets/AAPL_Analysis.png @compliance_attachments/2024/12/;
-    PUT file:///path/to/assets/ACME.Finance.Trading.Infra.png @compliance_attachments/2024/12/;
+    PUT file:///path/to/assets/order_entry_screenshot.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
+    PUT file:///path/to/assets/ACME.Finance.Trading.Infra.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
+    PUT file:///path/to/assets/trading_infrastructure_v3.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
+    PUT file:///path/to/assets/public_market_summary.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
 
 Verify upload:
     LIST @compliance_attachments;
+
+IMAGE ANALYSIS SYNTAX:
+Use TO_FILE() to reference IMAGES from a stage:
+    AI_COMPLETE('model', 'prompt', TO_FILE('@stage', 'path/to/file.png'))
+
+For multiple images, use PROMPT() helper:
+    AI_COMPLETE('model', PROMPT('Compare {0} to {1}', TO_FILE(...), TO_FILE(...)))
+
+SUPPORTED FORMATS: .jpg, .jpeg, .png, .webp, .gif ONLY
+(PDFs, Excel, Word files NOT supported - use screenshots instead)
+
+Max file size: 3.75 MB for Claude models
+Max dimensions: 8000 x 8000 pixels
+Max images per prompt: 20 for Claude models
+
+Token cost for Claude: ~(Width × Height) / 750 tokens per image
 */
 
--- Analyze trading system screenshot
--- Use AI_COMPLETE with TO_FILE() for multimodal (image) analysis
+-- Analyze trading system screenshot for coordinated trading evidence
 SELECT 
     'order_entry_screenshot.png' AS filename,
     AI_COMPLETE(
-        'claude-sonnet-4-5',
+        'claude-3-5-sonnet',
+        'You are a compliance analyst reviewing a trading system screenshot.
+        
+Analyze this image for:
+- Coordinated trading evidence (multiple orders at same time, annotations)
+- Suspicious annotations or handwritten notes
+- Visible account numbers or trader IDs
+- Evidence of market manipulation
+
+Return your analysis as a JSON object:
+{
+    "violation_type": "coordinated_trading|market_manipulation|clean",
+    "severity": "CRITICAL|SENSITIVE|CLEAN",
+    "concerns": ["specific concern 1", "specific concern 2"],
+    "visible_identifiers": ["any account numbers or IDs visible"],
+    "action": "recommended action"
+}
+
+Return ONLY the JSON object.',
+        TO_FILE('@compliance_attachments', '2024/12/order_entry_screenshot.jpg')
+    ) AS analysis;
+
+-- Analyze architecture diagram screenshot for data leak risk
+SELECT 
+    'ACME.Finance.Trading.Infra.jpg' AS filename,
+    AI_COMPLETE(
+        'claude-3-5-sonnet',
+        'You are a data security analyst reviewing a screenshot of an internal architecture diagram.
+
+Analyze this image for security concerns:
+- Exposed IP addresses or server names
+- Visible credentials or access keys
+- Internal-only markings or classifications
+- AWS account IDs or cloud resource identifiers
+- Information that should not be shared externally
+
+Return your analysis as a JSON object:
+{
+    "violation_type": "data_leak|credential_exposure|internal_only|clean",
+    "severity": "CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN",
+    "exposed_info": ["specific exposed item 1", "specific exposed item 2"],
+    "classification_markings": ["any visible classification labels"],
+    "safe_for_external": true/false,
+    "reasoning": "brief explanation"
+}
+
+Return ONLY the JSON object.',
+        TO_FILE('@compliance_attachments', '2024/12/ACME.Finance.Trading.Infra.jpg')
+    ) AS analysis;
+
+-- Analyze public market data screenshot - should be flagged as CLEAN (no risk)
+-- This demonstrates that the AI correctly identifies safe, non-confidential content
+SELECT 
+    'public_market_summary.jpg' AS filename,
+    AI_COMPLETE(
+        'claude-3-5-sonnet',
+        'You are a compliance analyst reviewing a screenshot of a spreadsheet.
+
+Analyze this image for compliance concerns:
+- Is this public or non-public information?
+- Are there any confidential markings?
+- Does it contain insider information or trade recommendations?
+- Is this safe to share externally?
+
+Return your analysis as a JSON object:
+{
+    "violation_type": "insider_trading|material_nonpublic_info|data_leak|clean",
+    "severity": "CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN",
+    "data_classification": "public|internal|confidential|restricted",
+    "concerns": ["any concerns found, or empty if none"],
+    "safe_for_external": true/false,
+    "reasoning": "brief explanation of why this is or is not a compliance concern"
+}
+
+Return ONLY the JSON object.',
+        TO_FILE('@compliance_attachments', '2024/12/public_market_summary.jpg')
+    ) AS analysis;
+
+-- =============================================================================
+-- MULTI-IMAGE COMPARISON (Using PROMPT helper)
+-- Compare multiple attachments from the same email thread
+-- =============================================================================
+
+/*
+Use PROMPT() to analyze multiple images in a single call.
+Placeholders {0}, {1}, etc. reference the TO_FILE() arguments in order.
+*/
+
+-- Compare violation vs clean images to demonstrate AI differentiation
+SELECT 
+    'Multi-image comparison: Violation vs Clean' AS analysis_type,
+    AI_COMPLETE(
+        'claude-3-5-sonnet',
         PROMPT(
-            'You are a compliance analyst. Analyze this trading system screenshot.
-            Look for: coordinated trading evidence, suspicious annotations, visible account numbers.
-            
-Return JSON: {"violation_type": "...", "severity": "CRITICAL|SENSITIVE|CLEAN", "concerns": [...], "action": "..."}',
-            TO_FILE(@compliance_attachments, '2024/12/order_entry_screenshot.png')
+            'You are a compliance analyst. Compare these two image attachments.
+
+Image 1 {0}: First spreadsheet screenshot
+Image 2 {1}: Second spreadsheet screenshot
+
+For EACH image, determine:
+- Is it a compliance concern or safe?
+- What classification would you assign?
+
+Return your analysis as a JSON object:
+{
+    "image_1_assessment": {
+        "classification": "violation|clean",
+        "severity": "CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN",
+        "key_concerns": ["specific concerns or empty if clean"]
+    },
+    "image_2_assessment": {
+        "classification": "violation|clean", 
+        "severity": "CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN",
+        "key_concerns": ["specific concerns or empty if clean"]
+    },
+    "comparison_summary": "brief comparison of why one is flagged and one is not"
+}
+
+Return ONLY the JSON object.',
+            TO_FILE('@compliance_attachments', '2024/12/trading_infrastructure_v3.jpg'),
+            TO_FILE('@compliance_attachments', '2024/12/public_market_summary.jpg')
         )
     ) AS analysis;
 
--- Analyze architecture diagram for data leak risk
-SELECT 
-    'ACME.Finance.Trading.Infra.png' AS filename,
-    AI_COMPLETE(
-        'claude-sonnet-4-5',
-        PROMPT(
-            'Analyze this architecture diagram for security concerns.
-            Look for: exposed IPs, server names, credentials, internal-only markings.
-            
-Return JSON: {"violation_type": "...", "severity": "...", "exposed_info": [...], "safe_for_external": true/false}',
-            TO_FILE(@compliance_attachments, '2024/12/ACME.Finance.Trading.Infra.png')
-        )
-    ) AS analysis;
+-- =============================================================================
+-- IMAGE CLASSIFICATION WITH AI_CLASSIFY
+-- Quick categorization without full analysis
+-- =============================================================================
 
--- Analyze Excel screenshot for insider trading indicators
+-- Classify image type for routing
 SELECT 
-    'AAPL_Analysis.png' AS filename,
-    AI_COMPLETE(
-        'claude-sonnet-4-5',
-        PROMPT(
-            'Analyze this spreadsheet screenshot for insider trading indicators.
-            Look for: insider sources, non-public information, trade recommendations.
-            
-Return JSON: {"violation_type": "...", "severity": "...", "insider_indicators": [...], "securities": [...]}',
-            TO_FILE(@compliance_attachments, '2024/12/AAPL_Analysis.png')
-        )
-    ) AS analysis;
+    'order_entry_screenshot.jpg' AS filename,
+    AI_CLASSIFY(
+        TO_FILE('@compliance_attachments', '2024/12/order_entry_screenshot.jpg'),
+        ['Trading System Screenshot', 'Financial Spreadsheet Screenshot', 'Architecture Diagram', 
+         'Email Screenshot', 'Legal Document Screenshot', 'Marketing Material']
+    ) AS document_classification;
+
+-- Multi-label classification for compliance concerns - compare violation vs clean
+SELECT 
+    'trading_infrastructure_v3.jpg (should flag confidential)' AS filename,
+    AI_CLASSIFY(
+        TO_FILE('@compliance_attachments', '2024/12/trading_infrastructure_v3.jpg'),
+        ['Contains Confidential Markings', 'Contains Internal IPs', 'Contains Server Names',
+         'Safe for External Sharing', 'Public Information'],
+        {'output_mode': 'multi'}
+    ) AS compliance_labels;
+
+SELECT 
+    'public_market_summary.jpg (should flag safe/public)' AS filename,
+    AI_CLASSIFY(
+        TO_FILE('@compliance_attachments', '2024/12/public_market_summary.jpg'),
+        ['Contains Confidential Markings', 'Contains Internal IPs', 'Contains Server Names',
+         'Safe for External Sharing', 'Public Information'],
+        {'output_mode': 'multi'}
+    ) AS compliance_labels;
 
 -- =============================================================================
 -- COMBINED DASHBOARD
@@ -330,24 +533,88 @@ ORDER BY
     END;
 
 -- =============================================================================
--- COMPLETE APPROACH SUMMARY
+-- COMPLETE APPROACH WITH STRUCTURED OUTPUTS + MULTIMODAL - SUMMARY
 -- =============================================================================
 
 /*
-PROS of CORTEX.COMPLETE:
-✅ Full control over prompts and output schema
-✅ Access to Frontier models (Claude, Llama 405B, etc.)
-✅ Custom JSON schemas for your exact needs
-✅ Can combine multiple analyses in one call
-✅ Deeper reasoning and explanation
-✅ Better for complex, nuanced analysis
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    TWO KEY CAPABILITIES DEMONSTRATED                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. STRUCTURED OUTPUTS (for text analysis)                                  │
+│     Uses response_format parameter to guarantee JSON schema compliance      │
+│                                                                             │
+│  2. MULTIMODAL ANALYSIS (for images/documents)                              │
+│     Uses TO_FILE() to analyze images, PDFs, spreadsheets from stages        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-CONS:
-❌ More verbose SQL (longer prompts)
-❌ May be slower for simple tasks
-❌ Requires prompt engineering
-❌ Higher token usage
+STRUCTURED OUTPUTS SYNTAX:
+    AI_COMPLETE(
+        model => 'claude-sonnet-4-5',
+        prompt => 'Analyze this email...',
+        response_format => {
+            'type': 'json',
+            'schema': {
+                'type': 'object',
+                'properties': {...},
+                'required': [...]
+            }
+        }
+    )
+
+BENEFITS OF STRUCTURED OUTPUTS:
+✅ Schema enforced at token generation (not just requested)
+✅ Guaranteed valid JSON matching your schema
+✅ Enum constraints ensure valid categorical values
+✅ Required fields always present in output
+✅ Seamless integration with downstream systems
+
+MULTIMODAL SYNTAX:
+    -- Single image
+    AI_COMPLETE('claude-3-5-sonnet', 'prompt', TO_FILE(@stage, 'file.png'))
+    
+    -- Multiple images with PROMPT() helper
+    AI_COMPLETE('claude-3-5-sonnet', 
+        PROMPT('Compare {0} to {1}', TO_FILE(@stage, 'a.png'), TO_FILE(@stage, 'b.png')))
+    
+    -- Image classification
+    AI_CLASSIFY(TO_FILE(@stage, 'file.png'), ['Category1', 'Category2'])
+
+MULTIMODAL REQUIREMENTS (Claude models):
+• Supported formats: .jpg, .jpeg, .png, .webp, .gif
+• Max file size: 3.75 MB per image
+• Max dimensions: 8000x8000 pixels
+• Max images per prompt: 20
+• Token cost: ~(Width × Height) / 750 tokens per image
+
+SCHEMA BEST PRACTICES:
+• Use 'enum' for categorical values to constrain outputs
+• Use 'description' for each field to improve accuracy
+• Use 'required' array to ensure critical fields
+• Keep property names simple (letters, digits, hyphen, underscore)
+• For complex schemas, use $defs for reusable components
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         COMPLETE APPROACH SUMMARY                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PROS:                                                                      │
+│  ✅ Full control over prompts and output schema                             │
+│  ✅ Access to Frontier models (Claude, Llama, Mistral, OpenAI)              │
+│  ✅ GUARANTEED JSON conformance via response_format                         │
+│  ✅ MULTIMODAL: Analyze images, screenshots, documents, charts              │
+│  ✅ Multi-image comparison in single call                                   │
+│  ✅ AI_CLASSIFY for quick image categorization                              │
+│  ✅ Deeper reasoning and explanation                                        │
+│                                                                             │
+│  CONS:                                                                      │
+│  ❌ More verbose SQL (longer schema definitions)                            │
+│  ❌ May be slower for simple tasks                                          │
+│  ❌ Schema complexity increases token usage                                 │
+│  ❌ Image analysis has per-image token costs                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 
 Next: Compare both approaches side-by-side → 04_comparison.sql
 */
-

@@ -56,6 +56,7 @@ USE WAREHOUSE GENAI_HOL_WH;
 
 CREATE OR REPLACE STAGE compliance_attachments
     DIRECTORY = (ENABLE = TRUE)
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')  -- Server-side encryption required for AI_COMPLETE
     COMMENT = 'Stage for email attachments (images, documents, spreadsheets)';
 
 -- =============================================================================
