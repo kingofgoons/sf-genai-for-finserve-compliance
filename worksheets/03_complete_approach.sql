@@ -20,8 +20,11 @@ USE WAREHOUSE GENAI_HOL_WH;
 CORTEX.COMPLETE supports LLMs from: OpenAI, Anthropic, Meta, Mistral AI, DeepSeek, Google, Reka.
 All models fully hosted in Snowflake - your data never leaves.
 
-EXAMPLE MODELS (check docs for full list and regional availability):
+AVAILABLE MODELS (check docs for regional availability):
+• openai-gpt-5        - OpenAI flagship
 • claude-sonnet-4-5   - Anthropic (multimodal)
+• gemini-3-pro        - Google 
+• deepseek-r1         - DeepSeek reasoning model
 • llama3.1-405b       - Meta large
 • llama3.1-70b        - Meta medium  
 • llama3.1-8b         - Meta small (fastest)
