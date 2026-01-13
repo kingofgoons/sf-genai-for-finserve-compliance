@@ -53,33 +53,63 @@ WHERE lang != 'en';
 
 -- =============================================================================
 -- STEP 3: AI_SENTIMENT
--- Score emotional tone: -1 (negative) to +1 (positive)
--- Unusual sentiment can indicate stress, urgency, or deception
+-- Analyze sentiment across compliance-relevant categories
+-- Returns: positive, negative, neutral, mixed, unknown for each category
 -- =============================================================================
 
--- Analyze sentiment across all emails (translate first if needed)
+-- Analyze sentiment with compliance-relevant categories
+-- Categories: urgency, secrecy, pressure, professionalism
 SELECT 
     email_id,
     sender,
     subject,
     lang,
-    ROUND(AI_SENTIMENT(
+    AI_SENTIMENT(
         CASE 
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
-        END
-    ), 2) AS sentiment_score,
+        END,
+        ['urgency', 'secrecy', 'pressure', 'professionalism']
+    ) AS sentiment_analysis
+FROM compliance_emails;
+
+-- Extract individual category sentiments for easier analysis
+SELECT 
+    email_id,
+    subject,
+    sentiment:categories[0]:sentiment::STRING AS overall,
+    sentiment:categories[1]:sentiment::STRING AS urgency,
+    sentiment:categories[2]:sentiment::STRING AS secrecy,
+    sentiment:categories[3]:sentiment::STRING AS pressure,
+    sentiment:categories[4]:sentiment::STRING AS professionalism,
+    -- Flag concerning patterns
     CASE 
-        WHEN AI_SENTIMENT(
-            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END
-        ) < -0.3 THEN '🔴 Negative - Review'
-        WHEN AI_SENTIMENT(
-            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END
-        ) > 0.5 THEN '🟢 Positive'
-        ELSE '🟡 Neutral'
-    END AS tone
-FROM compliance_emails
-ORDER BY sentiment_score;
+        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed') 
+          OR sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')
+        THEN '🔴 Review - Secrecy/Pressure Detected'
+        WHEN sentiment:categories[1]:sentiment::STRING = 'positive'
+        THEN '🟡 Monitor - Urgent Tone'
+        ELSE '🟢 Normal'
+    END AS compliance_flag
+FROM (
+    SELECT 
+        email_id,
+        subject,
+        AI_SENTIMENT(
+            CASE 
+                WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
+                ELSE email_content
+            END,
+            ['urgency', 'secrecy', 'pressure', 'professionalism']
+        ) AS sentiment
+    FROM compliance_emails
+)
+ORDER BY 
+    CASE compliance_flag
+        WHEN '🔴 Review - Secrecy/Pressure Detected' THEN 1
+        WHEN '🟡 Monitor - Urgent Tone' THEN 2
+        ELSE 3
+    END;
 
 -- =============================================================================
 -- STEP 4: AI_CLASSIFY
@@ -186,13 +216,14 @@ SELECT
         ELSE email_content
     END, 100) || '...' AS content_preview,
     
-    -- Sentiment
-    ROUND(AI_SENTIMENT(
+    -- Sentiment (overall + key compliance categories)
+    AI_SENTIMENT(
         CASE 
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
-        END
-    ), 2) AS sentiment,
+        END,
+        ['urgency', 'secrecy', 'pressure']
+    ):categories[0]:sentiment::STRING AS overall_sentiment,
     
     -- Classification
     AI_CLASSIFY(
@@ -231,7 +262,8 @@ We've learned the building blocks:
 
 1. CORTEX.COMPLETE - Detect language (stored in lang column)
 2. AI_TRANSLATE    - Translate non-English emails using the lang column
-3. AI_SENTIMENT    - Flag unusual emotional tones  
+3. AI_SENTIMENT    - Analyze sentiment by compliance categories (urgency, secrecy, pressure)
+                     Returns: positive, negative, neutral, mixed, unknown
 4. AI_CLASSIFY     - Categorize violation types
 5. AI_EXTRACT      - Pull specific violating phrases as evidence
 

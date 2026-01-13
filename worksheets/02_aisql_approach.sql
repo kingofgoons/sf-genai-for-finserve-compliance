@@ -29,13 +29,21 @@ SELECT
         ELSE e.email_content
     END AS english_content,
     
-    -- Step 2: Sentiment analysis
-    ROUND(AI_SENTIMENT(
+    -- Step 2: Sentiment analysis (compliance-relevant categories)
+    AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
-        END
-    ), 2) AS sentiment_score,
+        END,
+        ['urgency', 'secrecy', 'pressure']
+    ):categories[0]:sentiment::STRING AS overall_sentiment,
+    AI_SENTIMENT(
+        CASE 
+            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
+            ELSE e.email_content
+        END,
+        ['urgency', 'secrecy', 'pressure']
+    ):categories[2]:sentiment::STRING AS secrecy_sentiment,
     
     -- Step 3: Classification
     AI_CLASSIFY(
