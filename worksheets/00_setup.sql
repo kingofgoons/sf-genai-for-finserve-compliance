@@ -47,12 +47,12 @@ CREATE OR REPLACE TABLE compliance_emails (
     received_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
     
     -- AI Analysis columns (populated in 01_building_blocks.sql)
-    en_content          TEXT,         -- English translation (or original if already English)
-    sentiment           VARIANT,      -- AI_SENTIMENT results
-    classification      VARIANT,      -- AI_CLASSIFY results  
-    extracted_info      VARIANT,      -- AI_EXTRACT results
-    compliance_flag     VARCHAR(50),  -- Derived: CRITICAL, SENSITIVE, CLEAN
-    violations_list     VARCHAR(500)  -- Comma-separated violation labels
+    en_content          TEXT DEFAULT NULL,         -- English translation (or original if already English)
+    sentiment           VARIANT DEFAULT NULL,      -- AI_SENTIMENT results
+    classification      VARIANT DEFAULT NULL,      -- AI_CLASSIFY results  
+    extracted_info      VARIANT DEFAULT NULL,      -- AI_EXTRACT results
+    compliance_flag     VARCHAR(50) DEFAULT NULL,  -- Derived: CRITICAL, SENSITIVE, CLEAN
+    violations_list     VARCHAR(500) DEFAULT NULL  -- Comma-separated violation labels
 );
 
 -- Email attachments with stage file paths
@@ -70,10 +70,10 @@ CREATE OR REPLACE TABLE email_attachments (
     image_description TEXT,
     
     -- AI Analysis columns (populated in 02_aisql_approach.sql)
-    classification      VARIANT,      -- AI_CLASSIFY results
-    extracted_info      VARIANT,      -- AI_EXTRACT results
-    compliance_flag     VARCHAR(50),  -- SENSITIVE or CLEAN
-    violations_list     VARCHAR(500)  -- Comma-separated violation labels
+    classification      VARIANT DEFAULT NULL,      -- AI_CLASSIFY results
+    extracted_info      VARIANT DEFAULT NULL,      -- AI_EXTRACT results
+    compliance_flag     VARCHAR(50) DEFAULT NULL,  -- SENSITIVE or CLEAN
+    violations_list     VARCHAR(500) DEFAULT NULL  -- Comma-separated violation labels
 );
 
 -- =============================================================================
@@ -149,14 +149,15 @@ VALUES
 -- For demo: image_description simulates what the image contains
 -- =============================================================================
 
-INSERT INTO email_attachments VALUES
+INSERT INTO email_attachments 
+    (attachment_id, email_id, filename, file_type, stage_path, file_size_kb, image_description)
+VALUES
     -- Attachment for Email 2: Spreadsheet with insider analysis
     (1, 2,
      'AAPL_Insider_Analysis.xlsx',
      'spreadsheet',
      '@compliance_attachments/2024/12/AAPL_Insider_Analysis.xlsx',
      245,
-     CURRENT_TIMESTAMP(),
      'Excel spreadsheet showing Apple Inc stock analysis. Contains columns labeled: "Insider Source", "Expected EPS", "Consensus EPS", "Trade Recommendation". A cell is highlighted in yellow showing "BUY BEFORE ANNOUNCEMENT". The footer contains text: "CONFIDENTIAL - DO NOT DISTRIBUTE". There is a chart showing expected stock price movement with an arrow pointing up labeled "Post-Announcement Target".'),
 
     -- Attachment for Email 3: Screenshot of trading system
@@ -165,7 +166,6 @@ INSERT INTO email_attachments VALUES
      'image/png',
      '@compliance_attachments/2024/12/order_entry_screenshot.png',
      1024,
-     CURRENT_TIMESTAMP(),
      'Screenshot of Bloomberg terminal order entry screen. The screen shows a list of pending orders for NVDA (NVIDIA Corporation). All orders have the same entry time of 10:15:00 AM. There are 8 separate order tickets visible, each from a different trader ID. A handwritten red annotation in the corner reads "COORDINATE WITH TEAM - SAME TIME". Trading account numbers are partially visible. The total order value shown is approximately $2.4 million.'),
 
     -- Attachment for Email 5: Internal architecture diagram
@@ -174,7 +174,6 @@ INSERT INTO email_attachments VALUES
      'application/pdf',
      '@compliance_attachments/2024/12/trading_infrastructure_v3.pdf',
      2048,
-     CURRENT_TIMESTAMP(),
      'Network architecture diagram with title "ACME Finance - Trading Infrastructure v3.0". The diagram shows connections between multiple systems: Internal Trading Engine (IP: 10.0.1.50), NYSE Direct Feed (connection ID visible), NASDAQ Direct Feed, Client Portfolio Database (server name: PROD-DB-01), Risk Management System, and Backup Data Center. AWS account ID "123456789012" is visible in the corner. A large red watermark across the page reads "INTERNAL USE ONLY - NOT FOR EXTERNAL DISTRIBUTION". The document footer shows "Last updated: November 2024 - Classification: HIGHLY CONFIDENTIAL".');
 
 -- =============================================================================
