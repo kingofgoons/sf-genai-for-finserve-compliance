@@ -171,6 +171,18 @@ VALUES
      TRUE,
      'ANALYST_001',
      'Research',
+     CURRENT_TIMESTAMP()),
+
+    -- Email 6: English - Clean email WITH PUBLIC MARKET DATA (should be flagged CLEAN)
+    (6,
+     'research@acmefinance.com',
+     'portfolio.managers@acmefinance.com',
+     'Q4 Market Summary - Public Data',
+     'Hi team, attached is our quarterly market summary based on publicly available data from Bloomberg and Reuters. This includes YTD performance for major indices and widely published analyst consensus estimates. Feel free to share with clients as needed. All data is sourced from public filings and market data feeds. Let me know if you have questions.',
+     NULL,
+     TRUE,
+     'ANALYST_002',
+     'Research',
      CURRENT_TIMESTAMP());
 
 -- =============================================================================
@@ -182,29 +194,37 @@ VALUES
 INSERT INTO email_attachments 
     (attachment_id, email_id, filename, file_type, stage_path, file_size_kb, image_description)
 VALUES
-    -- Attachment for Email 2: Spreadsheet with insider analysis
-    (1, 2,
-     'AAPL_Insider_Analysis.xlsx',
-     'spreadsheet',
-     '@compliance_attachments/2024/12/AAPL_Insider_Analysis.xlsx',
-     245,
-     'Excel spreadsheet showing Apple Inc stock analysis. Contains columns labeled: "Insider Source", "Expected EPS", "Consensus EPS", "Trade Recommendation". A cell is highlighted in yellow showing "BUY BEFORE ANNOUNCEMENT". The footer contains text: "CONFIDENTIAL - DO NOT DISTRIBUTE". There is a chart showing expected stock price movement with an arrow pointing up labeled "Post-Announcement Target".'),
-
-    -- Attachment for Email 3: Screenshot of trading system
-    (2, 3,
-     'order_entry_screenshot.png',
-     'image/png',
-     '@compliance_attachments/2024/12/order_entry_screenshot.png',
+    -- Attachment for Email 3: Screenshot of trading system (VIOLATION - coordinated trading)
+    (1, 3,
+     'order_entry_screenshot.jpg',
+     'image/jpeg',
+     '@compliance_attachments/2024/12/order_entry_screenshot.jpg',
      1024,
      'Screenshot of Bloomberg terminal order entry screen. The screen shows a list of pending orders for NVDA (NVIDIA Corporation). All orders have the same entry time of 10:15:00 AM. There are 8 separate order tickets visible, each from a different trader ID. A handwritten red annotation in the corner reads "COORDINATE WITH TEAM - SAME TIME". Trading account numbers are partially visible. The total order value shown is approximately $2.4 million.'),
 
-    -- Attachment for Email 5: Internal architecture diagram
-    (3, 5,
-     'trading_infrastructure_v3.pdf',
-     'application/pdf',
-     '@compliance_attachments/2024/12/trading_infrastructure_v3.pdf',
+    -- Attachment for Email 5: Internal architecture diagram (VIOLATION - data leak)
+    (2, 5,
+     'trading_infrastructure_v3.jpg',
+     'image/jpeg',
+     '@compliance_attachments/2024/12/trading_infrastructure_v3.jpg',
      2048,
-     'Network architecture diagram with title "ACME Finance - Trading Infrastructure v3.0". The diagram shows connections between multiple systems: Internal Trading Engine (IP: 10.0.1.50), NYSE Direct Feed (connection ID visible), NASDAQ Direct Feed, Client Portfolio Database (server name: PROD-DB-01), Risk Management System, and Backup Data Center. AWS account ID "123456789012" is visible in the corner. A large red watermark across the page reads "INTERNAL USE ONLY - NOT FOR EXTERNAL DISTRIBUTION". The document footer shows "Last updated: November 2024 - Classification: HIGHLY CONFIDENTIAL".');
+     'Network architecture diagram with title "ACME Finance - Trading Infrastructure v3.0". The diagram shows connections between multiple systems: Internal Trading Engine (IP: 10.0.1.50), NYSE Direct Feed (connection ID visible), NASDAQ Direct Feed, Client Portfolio Database (server name: PROD-DB-01), Risk Management System, and Backup Data Center. AWS account ID "123456789012" is visible in the corner. A large red watermark across the page reads "INTERNAL USE ONLY - NOT FOR EXTERNAL DISTRIBUTION". The document footer shows "Last updated: November 2024 - Classification: HIGHLY CONFIDENTIAL".'),
+
+    -- Attachment for Email 5: Additional architecture diagram  
+    (3, 5,
+     'ACME.Finance.Trading.Infra.jpg',
+     'image/jpeg',
+     '@compliance_attachments/2024/12/ACME.Finance.Trading.Infra.jpg',
+     1536,
+     'Detailed infrastructure diagram showing ACME Finance internal systems. Contains server rack layout with IP addresses (10.0.0.x range), database connection strings, and firewall rules. Header shows "ACME FINANCE - CONFIDENTIAL". Footer contains AWS region identifiers and VPC configuration details.'),
+
+    -- Attachment for Email 6: Public market data (CLEAN - no violation)
+    (4, 6,
+     'public_market_summary.jpg',
+     'image/jpeg',
+     '@compliance_attachments/2024/12/public_market_summary.jpg',
+     512,
+     'Screenshot of a spreadsheet showing Q4 market summary. Contains publicly available data: S&P 500 YTD return, NASDAQ composite performance, and analyst consensus estimates from Bloomberg. All figures match publicly reported data. No confidential markings or internal classifications visible. Footer shows "Source: Bloomberg Terminal - Public Data Feed".');
 
 -- =============================================================================
 -- VERIFY SETUP
