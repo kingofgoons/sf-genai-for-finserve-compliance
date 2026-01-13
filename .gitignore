@@ -26,6 +26,10 @@ Thumbs.db
 # Office temp files
 ~$*
 
+# Duplicate asset files (not needed for demo)
+assets/AAPL_Analysis.png
+assets/ACME.Finance.Trading.Infra.png
+
 # Credentials (never commit)
 *.pem
 *.key
