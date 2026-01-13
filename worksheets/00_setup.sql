@@ -44,7 +44,15 @@ CREATE OR REPLACE TABLE compliance_emails (
     has_attachment      BOOLEAN DEFAULT FALSE,
     trader_id           VARCHAR(50),
     department          VARCHAR(100),
-    received_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+    received_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    
+    -- AI Analysis columns (populated in 01_building_blocks.sql)
+    en_content          TEXT,         -- English translation (or original if already English)
+    sentiment           VARIANT,      -- AI_SENTIMENT results
+    classification      VARIANT,      -- AI_CLASSIFY results  
+    extracted_info      VARIANT,      -- AI_EXTRACT results
+    compliance_flag     VARCHAR(50),  -- Derived: CRITICAL, SENSITIVE, CLEAN
+    violations_list     VARCHAR(500)  -- Comma-separated violation labels
 );
 
 -- Email attachments with stage file paths
@@ -59,7 +67,13 @@ CREATE OR REPLACE TABLE email_attachments (
     
     -- For demo purposes: text description of image content
     -- In production, CORTEX.COMPLETE would analyze actual image bytes
-    image_description TEXT
+    image_description TEXT,
+    
+    -- AI Analysis columns (populated in 02_aisql_approach.sql)
+    classification      VARIANT,      -- AI_CLASSIFY results
+    extracted_info      VARIANT,      -- AI_EXTRACT results
+    compliance_flag     VARCHAR(50),  -- SENSITIVE or CLEAN
+    violations_list     VARCHAR(500)  -- Comma-separated violation labels
 );
 
 -- =============================================================================

@@ -1,9 +1,9 @@
 -- =============================================================================
 -- 02_AISQL_APPROACH.SQL
--- Full Compliance Pipeline Using Fine-Tuned AI SQL Functions
+-- Full Compliance Pipeline Using Stored AI Analysis
 -- 
--- This approach uses the purpose-built AI SQL functions.
--- Optimized for performance, convenient for common patterns.
+-- PREREQUISITE: Run 01_building_blocks.sql first to populate analysis columns!
+-- This worksheet queries the pre-computed AI results for fast analysis.
 -- =============================================================================
 
 USE DATABASE GENAI_COMPLIANCE_DEMO;
@@ -11,8 +11,20 @@ USE SCHEMA PUBLIC;
 USE WAREHOUSE GENAI_HOL_WH;
 
 -- =============================================================================
--- CREATE THE AISQL PIPELINE
--- Uses: AI_TRANSLATE, AI_SENTIMENT, AI_CLASSIFY, AI_EXTRACT
+-- VERIFY ANALYSIS IS COMPLETE
+-- =============================================================================
+
+SELECT 
+    COUNT(*) AS total_emails,
+    COUNT(lang) AS lang_detected,
+    COUNT(en_content) AS translated,
+    COUNT(sentiment) AS sentiment_analyzed,
+    COUNT(classification) AS classified,
+    COUNT(compliance_flag) AS flagged
+FROM compliance_emails;
+
+-- =============================================================================
+-- EMAIL ANALYSIS VIEW (using stored columns)
 -- =============================================================================
 
 CREATE OR REPLACE VIEW aisql_email_analysis AS
@@ -21,115 +33,29 @@ SELECT
     e.sender,
     e.recipient,
     e.subject,
+    e.lang,
     e.has_attachment,
+    e.en_content,
     
-    -- Step 1: Translate to English (using detected lang column)
+    -- Sentiment from stored analysis
+    e.sentiment:categories[0]:sentiment::STRING AS overall_tone,
+    e.sentiment:categories[1]:sentiment::STRING AS confidentiality,
+    e.sentiment:categories[3]:sentiment::STRING AS deletion,
+    e.sentiment:categories[4]:sentiment::STRING AS risk,
+    
+    -- Classification from stored analysis
+    e.violations_list,
+    ARRAY_SIZE(e.classification:labels) AS violation_count,
+    
+    -- Extracted evidence
+    e.extracted_info,
+    
+    -- Derived fields
+    e.compliance_flag,
     CASE 
-        WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-        ELSE e.email_content
-    END AS english_content,
-    
-    -- Step 2: Sentiment analysis (compliance-focused categories)
-    -- Negative toward confidentiality = disregarding it = BAD
-    -- Positive toward deletion/risk = encouraging bad behavior = BAD
-    AI_SENTIMENT(
-        CASE 
-            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-            ELSE e.email_content
-        END,
-        ['confidentiality', 'deletion', 'risk']
-    ):categories[0]:sentiment::STRING AS overall_tone,
-    AI_SENTIMENT(
-        CASE 
-            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-            ELSE e.email_content
-        END,
-        ['confidentiality', 'deletion', 'risk']
-    ):categories[1]:sentiment::STRING AS confidentiality_sentiment,
-    
-    -- Step 3: Classification (multi-label with descriptions)
-    -- Empty array = no violations = clean
-    ARRAY_TO_STRING(
-        AI_CLASSIFY(
-            CASE 
-                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-                ELSE e.email_content
-            END,
-            [
-                {'label': 'insider_trading', 'description': 'sharing non-public information for trading advantage'},
-                {'label': 'market_manipulation', 'description': 'coordinating trades to artificially move prices'},
-                {'label': 'data_exfiltration', 'description': 'sharing confidential company data externally'},
-                {'label': 'policy_violation', 'description': 'instructions to delete evidence or hide communications'}
-            ],
-            {'task_description': 'Identify compliance violations in financial services communications', 'output_mode': 'multi'}
-        ):labels, ', '
-    ) AS violations,
-    
-    -- Step 4: Extract evidence
-    AI_EXTRACT(
-        CASE 
-            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-            ELSE e.email_content
-        END,
-        ['violating phrases', 'securities mentioned', 'concealment instructions']
-    ) AS extracted_evidence,
-    
-    -- Derived: Severity level (check for critical violations)
-    CASE 
-        WHEN ARRAYS_OVERLAP(
-            AI_CLASSIFY(
-                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                [
-                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
-                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
-                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
-                    {'label': 'policy_violation', 'description': 'deleting evidence'}
-                ],
-                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
-            ):labels,
-            ARRAY_CONSTRUCT('insider_trading', 'market_manipulation')
-        ) THEN 'CRITICAL'
-        WHEN ARRAY_CONTAINS('data_exfiltration'::VARIANT,
-            AI_CLASSIFY(
-                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                [
-                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
-                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
-                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
-                    {'label': 'policy_violation', 'description': 'deleting evidence'}
-                ],
-                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
-            ):labels
-        ) THEN 'SENSITIVE'
-        WHEN ARRAY_SIZE(
-            AI_CLASSIFY(
-                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                [
-                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
-                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
-                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
-                    {'label': 'policy_violation', 'description': 'deleting evidence'}
-                ],
-                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
-            ):labels
-        ) > 0 THEN 'POTENTIALLY_SENSITIVE'
-        ELSE 'CLEAN'
-    END AS severity,
-    
-    -- Derived: Recommended action (any violation = escalate)
-    CASE 
-        WHEN ARRAY_SIZE(
-            AI_CLASSIFY(
-                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                [
-                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
-                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
-                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
-                    {'label': 'policy_violation', 'description': 'deleting evidence'}
-                ],
-                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
-            ):labels
-        ) > 0 THEN '🚨 ESCALATE'
+        WHEN e.compliance_flag = 'CRITICAL' THEN '🚨 ESCALATE IMMEDIATELY'
+        WHEN e.compliance_flag = 'SENSITIVE' THEN '⚠️ COMPLIANCE REVIEW'
+        WHEN e.compliance_flag = 'MONITOR' THEN '👀 MONITOR'
         ELSE '✅ NO ACTION'
     END AS recommended_action
 
@@ -139,80 +65,80 @@ FROM compliance_emails e;
 -- VIEW RESULTS
 -- =============================================================================
 
--- Summary view
+-- Summary dashboard
 SELECT 
     email_id,
     sender,
     subject,
-    violations,
-    severity,
+    compliance_flag,
+    violations_list,
     overall_tone,
     recommended_action
 FROM aisql_email_analysis
 ORDER BY 
-    CASE severity
+    CASE compliance_flag
         WHEN 'CRITICAL' THEN 1
         WHEN 'SENSITIVE' THEN 2
-        ELSE 3
+        WHEN 'MONITOR' THEN 3
+        ELSE 4
     END;
 
--- Detailed view with evidence
+-- Detailed view with evidence (violations only)
 SELECT 
     email_id,
     subject,
-    violations,
-    severity,
-    extracted_evidence
+    compliance_flag,
+    violations_list,
+    extracted_info
 FROM aisql_email_analysis
-WHERE violations IS NOT NULL AND violations != '';  -- Has violations
+WHERE violation_count > 0;
 
 -- =============================================================================
--- ATTACHMENT ANALYSIS (Using AI_CLASSIFY + AI_EXTRACT)
+-- ATTACHMENT ANALYSIS VIEW
 -- =============================================================================
 
+-- First, populate attachment analysis columns
+UPDATE email_attachments
+SET 
+    classification = AI_CLASSIFY(
+        image_description,
+        [
+            {'label': 'data_leak', 'description': 'sensitive data visible in image'},
+            {'label': 'insider_info', 'description': 'non-public financial information'},
+            {'label': 'unauthorized_sharing', 'description': 'internal-only or restricted content'},
+            {'label': 'credential_exposure', 'description': 'passwords, IPs, or system access info'}
+        ],
+        {'task_description': 'Identify security concerns in document/image content', 'output_mode': 'multi'}
+    ),
+    extracted_info = AI_EXTRACT(
+        image_description,
+        ['sensitive data visible', 'confidential markings', 'internal identifiers']
+    )
+WHERE classification IS NULL;
+
+-- Update violations list
+UPDATE email_attachments
+SET violations_list = ARRAY_TO_STRING(classification:labels, ', ')
+WHERE violations_list IS NULL AND classification IS NOT NULL;
+
+-- Update compliance flag
+UPDATE email_attachments
+SET compliance_flag = CASE 
+    WHEN ARRAY_SIZE(classification:labels) > 0 THEN 'SENSITIVE'
+    ELSE 'CLEAN'
+END
+WHERE compliance_flag IS NULL AND classification IS NOT NULL;
+
+-- Create attachment view
 CREATE OR REPLACE VIEW aisql_attachment_analysis AS
 SELECT 
     a.attachment_id,
     a.email_id,
     a.filename,
     a.file_type,
-    
-    -- Classify attachment content (multi-label, no 'clean' - empty = clean)
-    ARRAY_TO_STRING(
-        AI_CLASSIFY(
-            a.image_description,
-            [
-                {'label': 'data_leak', 'description': 'sensitive data visible in image'},
-                {'label': 'insider_info', 'description': 'non-public financial information'},
-                {'label': 'unauthorized_sharing', 'description': 'internal-only or restricted content'},
-                {'label': 'credential_exposure', 'description': 'passwords, IPs, or system access info'}
-            ],
-            {'task_description': 'Identify security concerns in document/image content', 'output_mode': 'multi'}
-        ):labels, ', '
-    ) AS violations,
-    
-    -- Extract sensitive elements
-    AI_EXTRACT(
-        a.image_description,
-        ['sensitive data visible', 'confidential markings', 'internal identifiers']
-    ) AS sensitive_elements,
-    
-    -- Severity (any violation = sensitive, empty = clean)
-    CASE 
-        WHEN ARRAY_SIZE(
-            AI_CLASSIFY(a.image_description,
-                [
-                    {'label': 'data_leak', 'description': 'sensitive data visible'},
-                    {'label': 'insider_info', 'description': 'non-public financial information'},
-                    {'label': 'unauthorized_sharing', 'description': 'internal-only content'},
-                    {'label': 'credential_exposure', 'description': 'passwords or system access'}
-                ],
-                {'task_description': 'Identify security concerns', 'output_mode': 'multi'}
-            ):labels
-        ) > 0 THEN 'SENSITIVE'
-        ELSE 'CLEAN'
-    END AS severity
-
+    a.violations_list,
+    a.extracted_info AS sensitive_elements,
+    a.compliance_flag AS severity
 FROM email_attachments a;
 
 -- View attachment results
@@ -220,60 +146,98 @@ SELECT
     attachment_id,
     email_id,
     filename,
-    violations,
+    violations_list,
     severity,
     sensitive_elements
 FROM aisql_attachment_analysis;
 
 -- =============================================================================
--- COMBINED DASHBOARD
+-- COMBINED DASHBOARD: Emails + Attachments
 -- =============================================================================
 
+CREATE OR REPLACE VIEW aisql_combined_dashboard AS
 SELECT 
     e.email_id,
     e.sender,
     e.subject,
-    e.violations AS email_violations,
-    e.severity AS email_severity,
+    e.compliance_flag AS email_flag,
+    e.violations_list AS email_violations,
     a.filename AS attachment,
-    a.violations AS attachment_violations,
-    a.severity AS attachment_severity,
+    a.compliance_flag AS attachment_flag,
+    a.violations_list AS attachment_violations,
     
-    -- Overall severity (worst of either)
+    -- Overall severity (worst of email + attachment)
     CASE 
-        WHEN e.severity = 'CRITICAL' OR a.severity = 'CRITICAL' THEN 'CRITICAL'
-        WHEN e.severity = 'SENSITIVE' OR a.severity = 'SENSITIVE' THEN 'SENSITIVE'
+        WHEN e.compliance_flag = 'CRITICAL' OR a.compliance_flag = 'CRITICAL' THEN 'CRITICAL'
+        WHEN e.compliance_flag = 'SENSITIVE' OR a.compliance_flag = 'SENSITIVE' THEN 'SENSITIVE'
+        WHEN e.compliance_flag = 'MONITOR' THEN 'MONITOR'
         ELSE 'CLEAN'
-    END AS overall_severity,
-    
-    e.recommended_action
-    
-FROM aisql_email_analysis e
-LEFT JOIN aisql_attachment_analysis a ON e.email_id = a.email_id
+    END AS overall_severity
+
+FROM compliance_emails e
+LEFT JOIN email_attachments a ON e.email_id = a.email_id;
+
+-- View combined results
+SELECT * FROM aisql_combined_dashboard
 ORDER BY 
-    CASE 
-        WHEN e.severity = 'CRITICAL' OR a.severity = 'CRITICAL' THEN 1
-        WHEN e.severity = 'SENSITIVE' OR a.severity = 'SENSITIVE' THEN 2
-        ELSE 3
+    CASE overall_severity
+        WHEN 'CRITICAL' THEN 1
+        WHEN 'SENSITIVE' THEN 2
+        WHEN 'MONITOR' THEN 3
+        ELSE 4
     END;
 
 -- =============================================================================
--- AISQL APPROACH SUMMARY
+-- QUICK COMPLIANCE QUERIES
+-- =============================================================================
+
+-- All CRITICAL items
+SELECT email_id, sender, subject, email_violations, attachment, attachment_violations
+FROM aisql_combined_dashboard
+WHERE overall_severity = 'CRITICAL';
+
+-- Emails with insider trading
+SELECT email_id, sender, subject, email_violations
+FROM aisql_combined_dashboard
+WHERE email_violations LIKE '%insider_trading%';
+
+-- Attachments with data leaks
+SELECT email_id, attachment, attachment_violations
+FROM aisql_combined_dashboard
+WHERE attachment_violations LIKE '%data_leak%';
+
+-- Summary by severity
+SELECT 
+    overall_severity,
+    COUNT(*) AS count
+FROM aisql_combined_dashboard
+GROUP BY overall_severity
+ORDER BY 
+    CASE overall_severity
+        WHEN 'CRITICAL' THEN 1
+        WHEN 'SENSITIVE' THEN 2
+        WHEN 'MONITOR' THEN 3
+        ELSE 4
+    END;
+
+-- =============================================================================
+-- KEY TAKEAWAYS
 -- =============================================================================
 
 /*
-PROS of AI SQL Functions:
-✅ Purpose-built, optimized for specific tasks
-✅ Simple syntax - just function calls
-✅ Fast execution
-✅ Consistent output format
+The AISQL Approach:
+1. Run AI functions ONCE to populate analysis columns
+2. Create views that query the stored results
+3. Simple, fast queries without re-running AI
 
-CONS:
-❌ Less control over output schema
-❌ Limited to predefined function behaviors
-❌ Can't customize prompts deeply
-❌ Uses fine-tuned models, not latest Frontier models
+Benefits:
+- Consistent results (no variation between queries)
+- Fast queries (no AI latency)
+- Lower costs (AI functions run once, not per query)
+- Simpler SQL (just query columns, no complex function calls)
 
-Next: See same pipeline with CORTEX.COMPLETE → 03_complete_approach.sql
+The fine-tuned AI SQL functions (AI_TRANSLATE, AI_SENTIMENT, AI_CLASSIFY, AI_EXTRACT)
+are optimized for specific tasks and work great for batch processing.
+
+Next: See CORTEX.COMPLETE with Frontier models → 03_complete_approach.sql
 */
-
