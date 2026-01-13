@@ -37,8 +37,9 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE GENAI_COMPLIANCE_ROLE;
 -- GRANT ROLE GENAI_COMPLIANCE_ROLE TO USER your_username;
 
 -- Option 2: Use EXECUTE IMMEDIATE with current user
-SET my_user = CURRENT_USER();
-EXECUTE IMMEDIATE 'GRANT ROLE GENAI_COMPLIANCE_ROLE TO USER ' || $my_user;
+SET my_user = (SELECT CURRENT_USER());
+GRANT ROLE GENAI_COMPLIANCE_ROLE TO USER IDENTIFIER($my_user);
+
 
 -- =============================================================================
 -- SWITCH TO CUSTOM ROLE: All remaining operations use least-privilege
