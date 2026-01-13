@@ -129,8 +129,11 @@ SET compliance_flag = CASE
     ) THEN 'CRITICAL'
     -- Sensitive: data exfiltration or policy violations
     WHEN ARRAY_SIZE(classification:labels) > 0 THEN 'SENSITIVE'
-    -- Monitor: negative sentiment toward confidentiality or positive toward deletion/risk
-    WHEN sentiment:categories[1]:sentiment::STRING IN ('negative', 'mixed')
+    -- Monitor: suspicious sentiment patterns
+    -- Negative overall tone (threatening/urgent) OR negative toward confidentiality 
+    -- OR positive toward deletion/risk (encouraging bad behavior)
+    WHEN sentiment:categories[0]:sentiment::STRING IN ('negative', 'mixed')
+      OR sentiment:categories[1]:sentiment::STRING IN ('negative', 'mixed')
       OR sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')
       OR sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')
     THEN 'MONITOR'
