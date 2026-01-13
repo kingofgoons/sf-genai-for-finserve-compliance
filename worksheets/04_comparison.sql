@@ -151,14 +151,16 @@ SELECT
     
     -- Use COMPLETE for analysis (powerful, flexible)
     PARSE_JSON(
-        SNOWFLAKE.CORTEX.COMPLETE(
-            'claude-sonnet-4-5',
-            'Quick compliance check. Return JSON: {"risk": "high/medium/low", "reason": "..."}
-            
-            Email: ' || CASE 
-                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-                ELSE e.email_content
-            END
+        REGEXP_REPLACE(
+            AI_COMPLETE(
+                'claude-sonnet-4-5',
+                'Quick compliance check. Return ONLY raw JSON, no markdown: {"risk": "high/medium/low", "reason": "..."} Email: ' || 
+                CASE 
+                    WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
+                    ELSE e.email_content
+                END
+            ),
+            '^```json\\s*|^```\\s*|\\s*```$', ''
         )
     ) AS complete_analysis,
     
