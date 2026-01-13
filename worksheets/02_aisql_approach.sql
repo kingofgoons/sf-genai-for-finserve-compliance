@@ -60,21 +60,14 @@ SELECT
     ) AS violations,
     
     -- Step 4: Extract evidence
+    -- Step 4: Extract evidence (AI_EXTRACT takes array of items to extract)
     AI_EXTRACT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        'What specific phrases indicate a policy violation?'
-    ) AS violating_phrases,
-    
-    AI_EXTRACT(
-        CASE 
-            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-            ELSE e.email_content
-        END,
-        'What securities or companies are mentioned?'
-    ) AS securities_mentioned,
+        ['violating phrases', 'securities mentioned', 'concealment instructions']
+    ) AS extracted_evidence,
     
     -- Derived: Severity level (check for critical violations in label array)
     CASE 
@@ -143,8 +136,7 @@ SELECT
     subject,
     violations,
     severity,
-    violating_phrases,
-    securities_mentioned
+    extracted_evidence
 FROM aisql_email_analysis
 WHERE violations NOT LIKE '%clean%' OR violations LIKE '%,%';  -- Has violations
 
@@ -171,7 +163,7 @@ SELECT
     -- Extract sensitive elements
     AI_EXTRACT(
         a.image_description,
-        'What sensitive or confidential information is visible?'
+        ['sensitive data visible', 'confidential markings', 'internal identifiers']
     ) AS sensitive_elements,
     
     -- Severity

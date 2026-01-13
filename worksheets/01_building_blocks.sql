@@ -187,11 +187,11 @@ ORDER BY
 
 -- =============================================================================
 -- STEP 5: AI_EXTRACT
--- Pull out SPECIFIC phrases that are compliance violations
--- This is key evidence for investigations
+-- Pull out SPECIFIC entities and information from emails
+-- AI_EXTRACT now takes an array of items to extract
 -- =============================================================================
 
--- Extract the problematic phrases
+-- Extract compliance-relevant entities
 SELECT 
     email_id,
     subject,
@@ -201,8 +201,8 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        'What specific phrases indicate a compliance violation or policy breach?'
-    ) AS violating_phrases
+        ['violating phrases', 'securities mentioned', 'people involved', 'dates and times']
+    ) AS extracted_info
 FROM compliance_emails
 WHERE NOT ARRAY_CONTAINS('clean'::VARIANT, AI_CLASSIFY(
     CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
@@ -213,9 +213,9 @@ WHERE NOT ARRAY_CONTAINS('clean'::VARIANT, AI_CLASSIFY(
     CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
     ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
     {'output_mode': 'multi'}
-):labels) > 1;  -- Has violations even if also classified as clean
+):labels) > 1;
 
--- Extract more specific information
+-- Extract with more specific categories
 SELECT 
     email_id,
     subject,
@@ -224,17 +224,10 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        'What securities, companies, or financial instruments are mentioned?'
-    ) AS securities_mentioned,
-    AI_EXTRACT(
-        CASE 
-            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
-            ELSE email_content
-        END,
-        'What instructions to hide, delete, or keep secret are given?'
-    ) AS concealment_instructions
+        ['stock tickers', 'company names', 'dollar amounts', 'instructions to delete']
+    ) AS key_entities
 FROM compliance_emails
-WHERE lang != 'en' OR has_attachment = TRUE;  -- Focus on suspicious emails
+WHERE lang != 'en' OR has_attachment = TRUE;
 
 -- =============================================================================
 -- STEP 6: PUT THEM ALL TOGETHER
@@ -280,7 +273,7 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        'What is the single most concerning phrase in this email?'
+        ['key violation phrase', 'recommended action']
     ) AS key_evidence
 
 FROM compliance_emails
