@@ -69,36 +69,36 @@ CREATE OR REPLACE TABLE email_attachments (
 INSERT INTO compliance_emails 
     (email_id, sender, recipient, subject, email_content, lang, has_attachment, trader_id, department, received_at)
 VALUES
-    -- Email 1: German - Insider trading (tests AI_TRANSLATE)
+    -- Email 1: German - Insider trading (tests AI_TRANSLATE) - urgency + secrecy
     (1,
      'hans.mueller@external.de',
      'john.smith@acmefinance.com',
-     'Vertrauliche Information - Dringend',
-     'Ich habe vertrauliche Informationen über die bevorstehende Fusion zwischen TechCorp und MegaSoft erhalten. Die Ankündigung erfolgt am Montag vor Börseneröffnung. Wir sollten schnell handeln und unsere Positionen entsprechend anpassen. Bitte diese Information nicht weitergeben.',
+     'STRENG GEHEIM - Sofort handeln!',
+     'DRINGEND! Du MUSST sofort handeln! Ich habe absolut vertrauliche Informationen über die Fusion zwischen TechCorp und MegaSoft. Die Ankündigung kommt Montag VOR Börseneröffnung. Kaufe JETZT so viel wie möglich! Erzähl NIEMANDEM davon - nicht deinem Chef, nicht Compliance, NIEMANDEM. Lösche diese Nachricht sofort nach dem Lesen. Wenn das rauskommt, sind wir beide erledigt.',
      NULL,  -- Language will be detected in 01_building_blocks.sql
      FALSE,
      'TRADER_001',
      'Trading',
      CURRENT_TIMESTAMP()),
 
-    -- Email 2: English - Insider trading WITH ATTACHMENT
+    -- Email 2: English - Insider trading WITH ATTACHMENT (high urgency, secrecy, pressure)
     (2,
      'sarah.jones@acmefinance.com',
      'mike.chen@acmefinance.com',
-     'RE: AAPL Position - See Attached Analysis',
-     'Hey Mike, just got off the phone with my contact at Apple. They are announcing earnings beat tomorrow - way above consensus. I ran the numbers in the attached spreadsheet. We should load up on calls before close today. Don''t tell anyone else on the desk. Delete this after reading.',
+     'RE: AAPL Position - ACT NOW - See Attached Analysis',
+     'Mike - THIS IS URGENT. I need you to act RIGHT NOW before market close. My source at Apple just confirmed earnings will CRUSH estimates tomorrow. I''ve attached my analysis - the numbers are insane. You MUST buy calls immediately. DO NOT tell anyone about this - not compliance, not your manager, nobody. This stays between us. Delete this email and clear your chat history after reading. If you don''t act on this TODAY you will regret it.',
      NULL,
      TRUE,
      'TRADER_002',
      'Trading',
      CURRENT_TIMESTAMP()),
 
-    -- Email 3: English - Market manipulation WITH SCREENSHOT
+    -- Email 3: English - Market manipulation WITH SCREENSHOT (high pressure, secrecy)
     (3,
      'trading.desk@acmefinance.com',
      'group-traders@acmefinance.com',
-     'URGENT: Coordinated Strategy - Screenshot of Setup',
-     'Team, let''s coordinate our NVDA trades today. I''ve attached a screenshot of the order entry system with the timing. Everyone buy at 10:15 AM sharp to push the price up, then we sell into the momentum around 2 PM. Target is $15 profit per share. Delete this email and the screenshot after viewing.',
+     'MANDATORY: Coordinated Strategy - DO NOT FORWARD',
+     'This is NOT optional. Every single one of you MUST participate or you''re off the desk. Here''s the plan: we all hit NVDA at exactly 10:15 AM - no exceptions. I''ve attached the setup screenshot. Buy hard to push the price, then we dump at 2 PM into retail. If ANYONE breathes a word of this outside this group, I will personally make sure you never work in finance again. This conversation NEVER happened. Destroy all evidence after reading. I''m watching the order flow - I''ll know if you don''t comply.',
      NULL,
      TRUE,
      'TRADER_003',
@@ -117,12 +117,12 @@ VALUES
      'Compliance',
      CURRENT_TIMESTAMP()),
 
-    -- Email 5: French - Data exfiltration WITH ARCHITECTURE DIAGRAM
+    -- Email 5: French - Data exfiltration WITH ARCHITECTURE DIAGRAM (secrecy)
     (5,
      'pierre.dubois@acmefinance.com',
      'external.consultant@gmail.com',
-     'Documents demandés - Architecture interne',
-     'Voici les fichiers que vous avez demandés. J''ai inclus notre diagramme d''architecture interne montrant tous les systèmes de trading et les connexions aux bourses. Aussi les numéros de compte clients et les soldes. Veuillez les supprimer après utilisation car ces documents sont strictement confidentiels.',
+     'CONFIDENTIEL - Ne pas transférer',
+     'Voici les documents que tu as demandés - mais tu ne les as JAMAIS reçus de moi, compris? J''ai inclus notre architecture interne complète avec TOUS les systèmes de trading, les connexions aux bourses, les adresses IP internes, et les informations de compte clients. C''est STRICTEMENT INTERDIT de partager ça à l''extérieur. Supprime cet email IMMÉDIATEMENT après téléchargement. Si quelqu''un découvre que c''est moi qui t''ai envoyé ça, je perds mon emploi. On ne s''est jamais parlé.',
      NULL,
      TRUE,
      'ANALYST_001',
