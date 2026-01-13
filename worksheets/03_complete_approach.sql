@@ -306,7 +306,7 @@ Token cost for Claude: ~(Width × Height) / 750 tokens per image
 
 -- Analyze trading system screenshot for coordinated trading evidence
 SELECT 
-    'order_entry_screenshot.png' AS filename,
+    'order_entry_screenshot.jpg' AS filename,
     AI_COMPLETE(
         'claude-3-5-sonnet',
         'You are a compliance analyst reviewing a trading system screenshot.
