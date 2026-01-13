@@ -58,10 +58,10 @@ WHERE lang != 'en';
 -- 
 -- Key insight: A friendly email can still violate compliance!
 -- We detect sentiment TOWARD these behaviors (positive = encouraging them):
---   - sharing secrets: discussing confidential info sharing
---   - deleting evidence: discussing destruction of records
---   - insider tips: discussing non-public information
---   - hiding from compliance: discussing avoiding oversight
+--   - insider tips: non-public information sharing
+--   - coordinated trading: market manipulation
+--   - leaking internal data: data exfiltration
+--   - deleting evidence: destruction of records
 -- =============================================================================
 
 -- First, see the raw sentiment analysis with behavior categories
@@ -75,7 +75,7 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['sharing secrets', 'deleting evidence', 'insider tips', 'hiding from compliance']
+        ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
     ) AS sentiment_analysis
 FROM compliance_emails;
 
@@ -85,19 +85,20 @@ SELECT
     email_id,
     subject,
     sentiment:categories[0]:sentiment::STRING AS overall_tone,
-    sentiment:categories[1]:sentiment::STRING AS sharing_secrets,
-    sentiment:categories[2]:sentiment::STRING AS deleting_evidence,
-    sentiment:categories[3]:sentiment::STRING AS insider_tips,
-    sentiment:categories[4]:sentiment::STRING AS hiding_from_compliance,
+    sentiment:categories[1]:sentiment::STRING AS insider_tips,
+    sentiment:categories[2]:sentiment::STRING AS coordinated_trading,
+    sentiment:categories[3]:sentiment::STRING AS leaking_data,
+    sentiment:categories[4]:sentiment::STRING AS deleting_evidence,
     -- Flag based on POSITIVE sentiment toward bad behaviors
     CASE 
-        WHEN sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')  -- insider tips encouraged
+        WHEN sentiment:categories[1]:sentiment::STRING IN ('positive', 'mixed')  -- insider tips
         THEN '🔴 CRITICAL - Insider Information'
-        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed')  -- deleting evidence encouraged
-          OR sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')  -- hiding from compliance
-        THEN '🟠 HIGH - Evidence Destruction/Evasion'
-        WHEN sentiment:categories[1]:sentiment::STRING IN ('positive', 'mixed')  -- sharing secrets encouraged
-        THEN '🟡 REVIEW - Confidentiality Concern'
+        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed')  -- coordinated trading
+        THEN '🔴 CRITICAL - Market Manipulation'
+        WHEN sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')  -- leaking data
+        THEN '🟠 HIGH - Data Exfiltration'
+        WHEN sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')  -- deleting evidence
+        THEN '🟠 HIGH - Evidence Destruction'
         ELSE '🟢 Clean'
     END AS compliance_flag
 FROM (
@@ -109,16 +110,17 @@ FROM (
                 WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
                 ELSE email_content
             END,
-            ['sharing secrets', 'deleting evidence', 'insider tips', 'hiding from compliance']
+            ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
         ) AS sentiment
     FROM compliance_emails
 )
 ORDER BY 
     CASE compliance_flag
         WHEN '🔴 CRITICAL - Insider Information' THEN 1
-        WHEN '🟠 HIGH - Evidence Destruction/Evasion' THEN 2
-        WHEN '🟡 REVIEW - Confidentiality Concern' THEN 3
-        ELSE 4
+        WHEN '🔴 CRITICAL - Market Manipulation' THEN 2
+        WHEN '🟠 HIGH - Data Exfiltration' THEN 3
+        WHEN '🟠 HIGH - Evidence Destruction' THEN 4
+        ELSE 5
     END;
 
 -- =============================================================================
@@ -232,7 +234,7 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['sharing secrets', 'deleting evidence', 'insider tips']
+        ['insider tips', 'coordinated trading', 'leaking internal data']
     ):categories[0]:sentiment::STRING AS overall_tone,
     
     -- Classification
@@ -273,7 +275,7 @@ We've learned the building blocks:
 1. CORTEX.COMPLETE - Detect language (stored in lang column)
 2. AI_TRANSLATE    - Translate non-English emails using the lang column
 3. AI_SENTIMENT    - Analyze sentiment toward BEHAVIORS:
-                     - sharing secrets, deleting evidence, insider tips
+                     - insider tips, coordinated trading, leaking data, deleting evidence
                      POSITIVE sentiment = encouraging violations (flag!)
                      Works even on friendly-toned emails with violations
 4. AI_CLASSIFY     - Categorize violation types

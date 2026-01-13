@@ -36,15 +36,15 @@ SELECT
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['sharing secrets', 'deleting evidence', 'insider tips']
+        ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
     ):categories[0]:sentiment::STRING AS overall_tone,
     AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['sharing secrets', 'deleting evidence', 'insider tips']
-    ):categories[3]:sentiment::STRING AS insider_tips_sentiment,
+        ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
+    ):categories[1]:sentiment::STRING AS insider_tips_sentiment,
     
     -- Step 3: Classification
     AI_CLASSIFY(
