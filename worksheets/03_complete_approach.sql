@@ -13,15 +13,31 @@ USE WAREHOUSE GENAI_HOL_WH;
 
 -- =============================================================================
 -- FRONTIER MODELS AVAILABLE
+-- See: https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql#regional-availability
 -- =============================================================================
 
 /*
-You have access to the best models:
+CORTEX.COMPLETE supports industry-leading LLMs from multiple providers.
+All models are fully hosted in Snowflake - your data never leaves.
+
+LARGE MODELS (Best quality, higher cost):
 • claude-sonnet-4-5   - Anthropic's flagship, excellent reasoning + multimodal
-• llama3.1-70b        - Meta's open model, fast and capable
-• llama3.1-405b       - Meta's largest model
-• mistral-large2      - Strong multilingual capabilities
-• snowflake-arctic    - Snowflake's native model
+• llama3.1-405b       - Meta's largest open model, strong general capability
+• mistral-large2      - Mistral's flagship, strong multilingual
+
+MEDIUM MODELS (Good balance of quality and speed):
+• llama3.1-70b        - Meta's versatile model, fast and capable
+
+SMALL MODELS (Fastest, lowest cost):
+• llama3.1-8b         - Meta's efficient model for simpler tasks
+
+SNOWFLAKE NATIVE:
+• snowflake-arctic    - Snowflake's open enterprise-grade model
+
+DEEPSEEK:
+• deepseek models     - Available in select regions
+
+Note: Model availability varies by region. Check docs for your account's region.
 */
 
 -- =============================================================================
