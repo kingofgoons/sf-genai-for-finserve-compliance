@@ -17,29 +17,19 @@ USE WAREHOUSE GENAI_HOL_WH;
 -- =============================================================================
 
 /*
-CORTEX.COMPLETE supports industry-leading LLMs from multiple providers.
-All models are fully hosted in Snowflake - your data never leaves.
+CORTEX.COMPLETE supports LLMs from: OpenAI, Anthropic, Meta, Mistral AI, DeepSeek, Google, Reka.
+All models fully hosted in Snowflake - your data never leaves.
 
-LARGE MODELS (Best quality, higher cost):
-• claude-sonnet-4-5   - Anthropic's flagship, excellent reasoning + multimodal
-• gpt-4o              - OpenAI's flagship multimodal model
-• llama3.1-405b       - Meta's largest open model, strong general capability
-• mistral-large2      - Mistral's flagship, strong multilingual
-• gemini-2.0-flash    - Google's fast multimodal model
+EXAMPLE MODELS (check docs for full list and regional availability):
+• claude-sonnet-4-5   - Anthropic (multimodal)
+• llama3.1-405b       - Meta large
+• llama3.1-70b        - Meta medium  
+• llama3.1-8b         - Meta small (fastest)
+• mistral-large2      - Mistral (multilingual)
+• snowflake-arctic    - Snowflake native
 
-MEDIUM MODELS (Good balance of quality and speed):
-• llama3.1-70b        - Meta's versatile model, fast and capable
-
-SMALL MODELS (Fastest, lowest cost):
-• llama3.1-8b         - Meta's efficient model for simpler tasks
-
-SNOWFLAKE NATIVE:
-• snowflake-arctic    - Snowflake's open enterprise-grade model
-
-DEEPSEEK:
-• deepseek-r1         - DeepSeek reasoning model (select regions)
-
-Note: Model availability varies by region. Check docs for your account's region.
+Full model list: https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql#choosing-a-model
+Regional availability: https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql#regional-availability
 */
 
 -- =============================================================================
