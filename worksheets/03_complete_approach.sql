@@ -22,8 +22,10 @@ All models are fully hosted in Snowflake - your data never leaves.
 
 LARGE MODELS (Best quality, higher cost):
 • claude-sonnet-4-5   - Anthropic's flagship, excellent reasoning + multimodal
+• gpt-4o              - OpenAI's flagship multimodal model
 • llama3.1-405b       - Meta's largest open model, strong general capability
 • mistral-large2      - Mistral's flagship, strong multilingual
+• gemini-2.0-flash    - Google's fast multimodal model
 
 MEDIUM MODELS (Good balance of quality and speed):
 • llama3.1-70b        - Meta's versatile model, fast and capable
@@ -35,7 +37,7 @@ SNOWFLAKE NATIVE:
 • snowflake-arctic    - Snowflake's open enterprise-grade model
 
 DEEPSEEK:
-• deepseek models     - Available in select regions
+• deepseek-r1         - DeepSeek reasoning model (select regions)
 
 Note: Model availability varies by region. Check docs for your account's region.
 */
