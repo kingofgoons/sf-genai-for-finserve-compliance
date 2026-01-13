@@ -29,22 +29,22 @@ SELECT
         ELSE e.email_content
     END AS english_content,
     
-    -- Step 2: Sentiment analysis (compliance-relevant categories)
-    -- Categories: threats, deception, fear, aggression
+    -- Step 2: Sentiment analysis (behavior-focused categories)
+    -- Positive sentiment toward bad behaviors = RED FLAG
     AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['threats', 'deception', 'fear', 'aggression']
-    ):categories[0]:sentiment::STRING AS overall_sentiment,
+        ['sharing secrets', 'deleting evidence', 'insider tips']
+    ):categories[0]:sentiment::STRING AS overall_tone,
     AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['threats', 'deception', 'fear', 'aggression']
-    ):categories[2]:sentiment::STRING AS deception_sentiment,
+        ['sharing secrets', 'deleting evidence', 'insider tips']
+    ):categories[3]:sentiment::STRING AS insider_tips_sentiment,
     
     -- Step 3: Classification
     AI_CLASSIFY(

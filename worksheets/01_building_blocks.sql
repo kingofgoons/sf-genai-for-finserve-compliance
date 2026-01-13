@@ -53,17 +53,18 @@ WHERE lang != 'en';
 
 -- =============================================================================
 -- STEP 3: AI_SENTIMENT
--- Analyze sentiment across compliance-relevant categories
+-- Analyze sentiment toward compliance-relevant BEHAVIORS
 -- Returns: positive, negative, neutral, mixed, unknown for each category
 -- 
--- Categories chosen for compliance detection:
---   - threats: intimidation, coercion, consequences
---   - deception: hiding, lying, covering up
---   - fear: anxiety about getting caught
---   - aggression: hostile, demanding tone
+-- Key insight: A friendly email can still violate compliance!
+-- We detect sentiment TOWARD these behaviors (positive = encouraging them):
+--   - sharing secrets: discussing confidential info sharing
+--   - deleting evidence: discussing destruction of records
+--   - insider tips: discussing non-public information
+--   - hiding from compliance: discussing avoiding oversight
 -- =============================================================================
 
--- First, see the raw sentiment analysis with compliance categories
+-- First, see the raw sentiment analysis with behavior categories
 SELECT 
     email_id,
     sender,
@@ -74,30 +75,30 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['threats', 'deception', 'fear', 'aggression']
+        ['sharing secrets', 'deleting evidence', 'insider tips', 'hiding from compliance']
     ) AS sentiment_analysis
 FROM compliance_emails;
 
--- Extract and flag concerning sentiments
+-- Extract and flag concerning behaviors
+-- POSITIVE sentiment toward these behaviors = RED FLAG (they're encouraging violations!)
 SELECT 
     email_id,
     subject,
-    sentiment:categories[0]:sentiment::STRING AS overall,
-    sentiment:categories[1]:sentiment::STRING AS threats,
-    sentiment:categories[2]:sentiment::STRING AS deception,
-    sentiment:categories[3]:sentiment::STRING AS fear,
-    sentiment:categories[4]:sentiment::STRING AS aggression,
-    -- Flag emails with concerning sentiment patterns
+    sentiment:categories[0]:sentiment::STRING AS overall_tone,
+    sentiment:categories[1]:sentiment::STRING AS sharing_secrets,
+    sentiment:categories[2]:sentiment::STRING AS deleting_evidence,
+    sentiment:categories[3]:sentiment::STRING AS insider_tips,
+    sentiment:categories[4]:sentiment::STRING AS hiding_from_compliance,
+    -- Flag based on POSITIVE sentiment toward bad behaviors
     CASE 
-        WHEN sentiment:categories[1]:sentiment::STRING IN ('positive', 'mixed')  -- threats present
-          OR sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')  -- aggression present
-        THEN '🔴 CRITICAL - Threats/Aggression'
-        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed')  -- deception present
-          OR sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')  -- fear present
-        THEN '🟠 HIGH - Deception/Fear Detected'
-        WHEN sentiment:categories[0]:sentiment::STRING = 'negative'
-        THEN '🟡 MONITOR - Negative Tone'
-        ELSE '🟢 Normal'
+        WHEN sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')  -- insider tips encouraged
+        THEN '🔴 CRITICAL - Insider Information'
+        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed')  -- deleting evidence encouraged
+          OR sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')  -- hiding from compliance
+        THEN '🟠 HIGH - Evidence Destruction/Evasion'
+        WHEN sentiment:categories[1]:sentiment::STRING IN ('positive', 'mixed')  -- sharing secrets encouraged
+        THEN '🟡 REVIEW - Confidentiality Concern'
+        ELSE '🟢 Clean'
     END AS compliance_flag
 FROM (
     SELECT 
@@ -108,15 +109,15 @@ FROM (
                 WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
                 ELSE email_content
             END,
-            ['threats', 'deception', 'fear', 'aggression']
+            ['sharing secrets', 'deleting evidence', 'insider tips', 'hiding from compliance']
         ) AS sentiment
     FROM compliance_emails
 )
 ORDER BY 
     CASE compliance_flag
-        WHEN '🔴 CRITICAL - Threats/Aggression' THEN 1
-        WHEN '🟠 HIGH - Deception/Fear Detected' THEN 2
-        WHEN '🟡 MONITOR - Negative Tone' THEN 3
+        WHEN '🔴 CRITICAL - Insider Information' THEN 1
+        WHEN '🟠 HIGH - Evidence Destruction/Evasion' THEN 2
+        WHEN '🟡 REVIEW - Confidentiality Concern' THEN 3
         ELSE 4
     END;
 
@@ -225,14 +226,14 @@ SELECT
         ELSE email_content
     END, 100) || '...' AS content_preview,
     
-    -- Sentiment (overall + key compliance categories)
+    -- Sentiment toward compliance-relevant behaviors
     AI_SENTIMENT(
         CASE 
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['threats', 'deception', 'fear', 'aggression']
-    ):categories[0]:sentiment::STRING AS overall_sentiment,
+        ['sharing secrets', 'deleting evidence', 'insider tips']
+    ):categories[0]:sentiment::STRING AS overall_tone,
     
     -- Classification
     AI_CLASSIFY(
@@ -271,9 +272,10 @@ We've learned the building blocks:
 
 1. CORTEX.COMPLETE - Detect language (stored in lang column)
 2. AI_TRANSLATE    - Translate non-English emails using the lang column
-3. AI_SENTIMENT    - Analyze sentiment by compliance categories:
-                     - threats, deception, fear, aggression
-                     Returns: positive, negative, neutral, mixed, unknown
+3. AI_SENTIMENT    - Analyze sentiment toward BEHAVIORS:
+                     - sharing secrets, deleting evidence, insider tips
+                     POSITIVE sentiment = encouraging violations (flag!)
+                     Works even on friendly-toned emails with violations
 4. AI_CLASSIFY     - Categorize violation types
 5. AI_EXTRACT      - Pull specific violating phrases as evidence
 

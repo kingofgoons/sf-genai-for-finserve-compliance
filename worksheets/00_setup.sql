@@ -81,12 +81,12 @@ VALUES
      'Trading',
      CURRENT_TIMESTAMP()),
 
-    -- Email 2: English - Insider trading WITH ATTACHMENT (high urgency, secrecy, pressure)
+    -- Email 2: English - Insider trading WITH ATTACHMENT (friendly tone, still violating!)
     (2,
      'sarah.jones@acmefinance.com',
      'mike.chen@acmefinance.com',
-     'RE: AAPL Position - ACT NOW - See Attached Analysis',
-     'Mike - THIS IS URGENT. I need you to act RIGHT NOW before market close. My source at Apple just confirmed earnings will CRUSH estimates tomorrow. I''ve attached my analysis - the numbers are insane. You MUST buy calls immediately. DO NOT tell anyone about this - not compliance, not your manager, nobody. This stays between us. Delete this email and clear your chat history after reading. If you don''t act on this TODAY you will regret it.',
+     'RE: AAPL Position - Thought you''d want to know :)',
+     'Hey Mike! Hope you''re having a great day! So I was chatting with my friend at Apple over drinks last night and she let slip that earnings are going to be WAY better than anyone expects - like, blow-out numbers! I put together a little analysis in the attached spreadsheet. Thought you might want to get in before the announcement tomorrow morning! Just keep this between us though, okay? My friend could get in trouble. Maybe delete this after you read it. Anyway, hope this helps! Let''s grab lunch soon! 😊',
      NULL,
      TRUE,
      'TRADER_002',
