@@ -130,9 +130,10 @@ ORDER BY
 -- STEP 4: AI_CLASSIFY
 -- Categorize emails into violation types
 -- Zero-shot: define categories, get predictions immediately
+-- Using multi-label mode: an email can have MULTIPLE violations!
 -- =============================================================================
 
--- Classify all emails (with translation for non-English)
+-- Classify all emails with multi-label support
 SELECT 
     email_id,
     sender,
@@ -143,12 +144,13 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
+        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+        {'output_mode': 'multi'}
     ) AS classification
 FROM compliance_emails;
 
--- Extract just the classification label
--- Note: AI_CLASSIFY returns {"labels": ["category"]} - no confidence score
+-- Extract labels as comma-separated string
+-- Multi-label: an email could be BOTH insider_trading AND data_exfiltration
 SELECT 
     email_id,
     subject,
@@ -158,15 +160,28 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):labels[0]::STRING AS violation_type
+        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+        {'output_mode': 'multi'}
+    ):labels AS violation_labels,
+    ARRAY_TO_STRING(
+        AI_CLASSIFY(
+            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels, ', '
+    ) AS violations_list
 FROM compliance_emails
 ORDER BY 
-    CASE AI_CLASSIFY(
-        CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):labels[0]::STRING
-        WHEN 'clean' THEN 4
+    CASE 
+        WHEN ARRAY_CONTAINS('clean'::VARIANT, AI_CLASSIFY(
+            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels) AND ARRAY_SIZE(AI_CLASSIFY(
+            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels) = 1 THEN 4
         ELSE 1
     END;
 
@@ -189,10 +204,16 @@ SELECT
         'What specific phrases indicate a compliance violation or policy breach?'
     ) AS violating_phrases
 FROM compliance_emails
-WHERE AI_CLASSIFY(
+WHERE NOT ARRAY_CONTAINS('clean'::VARIANT, AI_CLASSIFY(
     CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
-    ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-):labels[0]::STRING != 'clean';
+    ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+    {'output_mode': 'multi'}
+):labels)
+   OR ARRAY_SIZE(AI_CLASSIFY(
+    CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+    ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+    {'output_mode': 'multi'}
+):labels) > 1;  -- Has violations even if also classified as clean
 
 -- Extract more specific information
 SELECT 
@@ -241,14 +262,17 @@ SELECT
         ['confidentiality', 'deletion', 'risk']
     ):categories[0]:sentiment::STRING AS overall_tone,
     
-    -- Classification
-    AI_CLASSIFY(
-        CASE 
-            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
-            ELSE email_content
-        END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):labels[0]::STRING AS violation_type,
+    -- Classification (multi-label: could have multiple violations)
+    ARRAY_TO_STRING(
+        AI_CLASSIFY(
+            CASE 
+                WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
+                ELSE email_content
+            END,
+            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels, ', '
+    ) AS violations,
     
     -- Key evidence
     AI_EXTRACT(
@@ -261,12 +285,18 @@ SELECT
 
 FROM compliance_emails
 ORDER BY 
-    CASE AI_CLASSIFY(
-        CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):labels[0]::STRING
-        WHEN 'clean' THEN 4
-        ELSE 1
+    CASE 
+        WHEN ARRAY_SIZE(AI_CLASSIFY(
+            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels) > 1 THEN 1  -- Multiple violations = highest priority
+        WHEN NOT ARRAY_CONTAINS('clean'::VARIANT, AI_CLASSIFY(
+            CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels) THEN 2  -- Single violation
+        ELSE 4  -- Clean
     END;
 
 -- =============================================================================

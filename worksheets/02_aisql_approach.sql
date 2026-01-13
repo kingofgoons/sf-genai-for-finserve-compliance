@@ -47,15 +47,17 @@ SELECT
         ['confidentiality', 'deletion', 'risk']
     ):categories[1]:sentiment::STRING AS confidentiality_sentiment,
     
-    -- Step 3: Classification
-    -- Note: AI_CLASSIFY returns {"labels": ["category"]} - no confidence score
-    AI_CLASSIFY(
-        CASE 
-            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-            ELSE e.email_content
-        END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):labels[0]::STRING AS violation_type,
+    -- Step 3: Classification (multi-label: email can have multiple violations)
+    ARRAY_TO_STRING(
+        AI_CLASSIFY(
+            CASE 
+                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
+                ELSE e.email_content
+            END,
+            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels, ', '
+    ) AS violations,
     
     -- Step 4: Extract evidence
     AI_EXTRACT(
@@ -74,34 +76,41 @@ SELECT
         'What securities or companies are mentioned?'
     ) AS securities_mentioned,
     
-    -- Derived: Severity level
+    -- Derived: Severity level (check for critical violations in label array)
     CASE 
-        WHEN AI_CLASSIFY(
-            CASE 
-                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-                ELSE e.email_content
-            END,
-            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-        ):labels[0]::STRING IN ('insider_trading', 'market_manipulation') THEN 'CRITICAL'
-        WHEN AI_CLASSIFY(
-            CASE 
-                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-                ELSE e.email_content
-            END,
-            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-        ):labels[0]::STRING = 'data_exfiltration' THEN 'SENSITIVE'
+        WHEN ARRAYS_OVERLAP(
+            AI_CLASSIFY(
+                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
+                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+                {'output_mode': 'multi'}
+            ):labels,
+            ARRAY_CONSTRUCT('insider_trading', 'market_manipulation')
+        ) THEN 'CRITICAL'
+        WHEN ARRAY_CONTAINS('data_exfiltration'::VARIANT,
+            AI_CLASSIFY(
+                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
+                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+                {'output_mode': 'multi'}
+            ):labels
+        ) THEN 'SENSITIVE'
         ELSE 'CLEAN'
     END AS severity,
     
     -- Derived: Recommended action
     CASE 
-        WHEN AI_CLASSIFY(
-            CASE 
-                WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-                ELSE e.email_content
-            END,
-            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-        ):labels[0]::STRING != 'clean' THEN '🚨 ESCALATE'
+        WHEN NOT ARRAY_CONTAINS('clean'::VARIANT,
+            AI_CLASSIFY(
+                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
+                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+                {'output_mode': 'multi'}
+            ):labels
+        ) OR ARRAY_SIZE(
+            AI_CLASSIFY(
+                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
+                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
+                {'output_mode': 'multi'}
+            ):labels
+        ) > 1 THEN '🚨 ESCALATE'
         ELSE '✅ NO ACTION'
     END AS recommended_action
 
@@ -116,7 +125,7 @@ SELECT
     email_id,
     sender,
     subject,
-    violation_type,
+    violations,
     severity,
     overall_tone,
     recommended_action
@@ -132,12 +141,12 @@ ORDER BY
 SELECT 
     email_id,
     subject,
-    violation_type,
+    violations,
     severity,
     violating_phrases,
     securities_mentioned
 FROM aisql_email_analysis
-WHERE violation_type != 'clean';
+WHERE violations NOT LIKE '%clean%' OR violations LIKE '%,%';  -- Has violations
 
 -- =============================================================================
 -- ATTACHMENT ANALYSIS (Using AI_CLASSIFY + AI_EXTRACT)
@@ -150,12 +159,14 @@ SELECT
     a.filename,
     a.file_type,
     
-    -- Classify attachment content
-    -- Note: AI_CLASSIFY returns {"labels": ["category"]} - no confidence score
-    AI_CLASSIFY(
-        a.image_description,
-        ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean']
-    ):labels[0]::STRING AS violation_type,
+    -- Classify attachment content (multi-label)
+    ARRAY_TO_STRING(
+        AI_CLASSIFY(
+            a.image_description,
+            ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean'],
+            {'output_mode': 'multi'}
+        ):labels, ', '
+    ) AS violations,
     
     -- Extract sensitive elements
     AI_EXTRACT(
@@ -165,9 +176,17 @@ SELECT
     
     -- Severity
     CASE 
-        WHEN AI_CLASSIFY(a.image_description,
-            ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean']
-        ):labels[0]::STRING != 'clean' THEN 'SENSITIVE'
+        WHEN NOT ARRAY_CONTAINS('clean'::VARIANT,
+            AI_CLASSIFY(a.image_description,
+                ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean'],
+                {'output_mode': 'multi'}
+            ):labels
+        ) OR ARRAY_SIZE(
+            AI_CLASSIFY(a.image_description,
+                ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean'],
+                {'output_mode': 'multi'}
+            ):labels
+        ) > 1 THEN 'SENSITIVE'
         ELSE 'CLEAN'
     END AS severity
 
@@ -178,7 +197,7 @@ SELECT
     attachment_id,
     email_id,
     filename,
-    violation_type,
+    violations,
     severity,
     sensitive_elements
 FROM aisql_attachment_analysis;
@@ -191,10 +210,10 @@ SELECT
     e.email_id,
     e.sender,
     e.subject,
-    e.violation_type AS email_violation,
+    e.violations AS email_violations,
     e.severity AS email_severity,
     a.filename AS attachment,
-    a.violation_type AS attachment_violation,
+    a.violations AS attachment_violations,
     a.severity AS attachment_severity,
     
     -- Overall severity (worst of either)
