@@ -55,12 +55,16 @@ SELECT
     END AS english_content,
     
     -- Full analysis in ONE call with structured output
+    -- Use REGEXP_REPLACE to strip markdown backticks if model includes them
     PARSE_JSON(
-        SNOWFLAKE.CORTEX.COMPLETE(
-            'claude-sonnet-4-5',
-            'You are a senior financial services compliance officer. Analyze this email thoroughly.
+        REGEXP_REPLACE(
+            SNOWFLAKE.CORTEX.COMPLETE(
+                'claude-sonnet-4-5',
+                'You are a senior financial services compliance officer. Analyze this email thoroughly.
 
-Return ONLY a valid JSON object with this EXACT schema:
+IMPORTANT: Return ONLY raw JSON. Do NOT wrap in markdown code blocks or backticks.
+
+Return a valid JSON object with this EXACT schema:
 {
     "violation_type": "<insider_trading|market_manipulation|data_exfiltration|clean>",
     "severity": "<CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN>",
@@ -90,7 +94,9 @@ Body:
     ELSE e.email_content
 END || '
 
-Return ONLY the JSON object. No markdown, no explanation outside the JSON.'
+Return ONLY the JSON object. No markdown, no backticks, no explanation.'
+            ),
+            '^```json\\s*|^```\\s*|\\s*```$', ''  -- Strip markdown code fences
         )
     ) AS analysis
 
@@ -144,14 +150,18 @@ SELECT
     a.filename,
     a.file_type,
     
+    -- Strip markdown backticks if model includes them
     PARSE_JSON(
-        SNOWFLAKE.CORTEX.COMPLETE(
-            'claude-sonnet-4-5',
-            'You are a data security analyst reviewing an email attachment.
+        REGEXP_REPLACE(
+            SNOWFLAKE.CORTEX.COMPLETE(
+                'claude-sonnet-4-5',
+                'You are a data security analyst reviewing an email attachment.
 
 Analyze this attachment description for security and compliance concerns.
 
-Return ONLY a valid JSON object:
+IMPORTANT: Return ONLY raw JSON. Do NOT wrap in markdown code blocks or backticks.
+
+Return a valid JSON object:
 {
     "violation_type": "<data_leak|insider_info|credential_exposure|pii_exposure|unauthorized_sharing|clean>",
     "severity": "<CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN>",
@@ -171,7 +181,9 @@ Severity guide:
 Attachment: ' || a.filename || ' (' || a.file_type || ')
 Content description: ' || a.image_description || '
 
-Return ONLY the JSON object.'
+Return ONLY the JSON object. No markdown, no backticks.'
+            ),
+            '^```json\\s*|^```\\s*|\\s*```$', ''
         )
     ) AS analysis
 
