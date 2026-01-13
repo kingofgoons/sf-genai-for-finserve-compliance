@@ -48,21 +48,14 @@ SELECT
     ):categories[1]:sentiment::STRING AS confidentiality_sentiment,
     
     -- Step 3: Classification
+    -- Note: AI_CLASSIFY returns {"labels": ["category"]} - no confidence score
     AI_CLASSIFY(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):class::STRING AS violation_type,
-    
-    AI_CLASSIFY(
-        CASE 
-            WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
-            ELSE e.email_content
-        END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):confidence::FLOAT AS classification_confidence,
+    ):labels[0]::STRING AS violation_type,
     
     -- Step 4: Extract evidence
     AI_EXTRACT(
@@ -89,14 +82,14 @@ SELECT
                 ELSE e.email_content
             END,
             ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-        ):class::STRING IN ('insider_trading', 'market_manipulation') THEN 'CRITICAL'
+        ):labels[0]::STRING IN ('insider_trading', 'market_manipulation') THEN 'CRITICAL'
         WHEN AI_CLASSIFY(
             CASE 
                 WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
                 ELSE e.email_content
             END,
             ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-        ):class::STRING = 'data_exfiltration' THEN 'SENSITIVE'
+        ):labels[0]::STRING = 'data_exfiltration' THEN 'SENSITIVE'
         ELSE 'CLEAN'
     END AS severity,
     
@@ -108,7 +101,7 @@ SELECT
                 ELSE e.email_content
             END,
             ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-        ):class::STRING != 'clean' THEN '🚨 ESCALATE'
+        ):labels[0]::STRING != 'clean' THEN '🚨 ESCALATE'
         ELSE '✅ NO ACTION'
     END AS recommended_action
 
@@ -125,8 +118,7 @@ SELECT
     subject,
     violation_type,
     severity,
-    ROUND(classification_confidence, 2) AS confidence,
-    sentiment_score,
+    overall_tone,
     recommended_action
 FROM aisql_email_analysis
 ORDER BY 
@@ -159,15 +151,11 @@ SELECT
     a.file_type,
     
     -- Classify attachment content
+    -- Note: AI_CLASSIFY returns {"labels": ["category"]} - no confidence score
     AI_CLASSIFY(
         a.image_description,
         ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean']
-    ):class::STRING AS violation_type,
-    
-    AI_CLASSIFY(
-        a.image_description,
-        ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean']
-    ):confidence::FLOAT AS confidence,
+    ):labels[0]::STRING AS violation_type,
     
     -- Extract sensitive elements
     AI_EXTRACT(
@@ -179,7 +167,7 @@ SELECT
     CASE 
         WHEN AI_CLASSIFY(a.image_description,
             ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean']
-        ):class::STRING != 'clean' THEN 'SENSITIVE'
+        ):labels[0]::STRING != 'clean' THEN 'SENSITIVE'
         ELSE 'CLEAN'
     END AS severity
 
@@ -192,7 +180,6 @@ SELECT
     filename,
     violation_type,
     severity,
-    ROUND(confidence, 2) AS confidence,
     sensitive_elements
 FROM aisql_attachment_analysis;
 

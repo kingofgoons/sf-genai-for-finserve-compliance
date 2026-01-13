@@ -147,7 +147,8 @@ SELECT
     ) AS classification
 FROM compliance_emails;
 
--- Extract just class and confidence
+-- Extract just the classification label
+-- Note: AI_CLASSIFY returns {"labels": ["category"]} - no confidence score
 SELECT 
     email_id,
     subject,
@@ -158,16 +159,16 @@ SELECT
             ELSE email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):class::STRING AS violation_type,
-    ROUND(AI_CLASSIFY(
-        CASE 
-            WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
-            ELSE email_content
-        END,
-        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):confidence::FLOAT, 2) AS confidence
+    ):labels[0]::STRING AS violation_type
 FROM compliance_emails
-ORDER BY confidence DESC;
+ORDER BY 
+    CASE AI_CLASSIFY(
+        CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
+        ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
+    ):labels[0]::STRING
+        WHEN 'clean' THEN 4
+        ELSE 1
+    END;
 
 -- =============================================================================
 -- STEP 5: AI_EXTRACT
@@ -191,7 +192,7 @@ FROM compliance_emails
 WHERE AI_CLASSIFY(
     CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
     ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-):class::STRING != 'clean';
+):labels[0]::STRING != 'clean';
 
 -- Extract more specific information
 SELECT 
@@ -247,7 +248,7 @@ SELECT
             ELSE email_content
         END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):class::STRING AS violation_type,
+    ):labels[0]::STRING AS violation_type,
     
     -- Key evidence
     AI_EXTRACT(
@@ -263,7 +264,7 @@ ORDER BY
     CASE AI_CLASSIFY(
         CASE WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en') ELSE email_content END,
         ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean']
-    ):class::STRING
+    ):labels[0]::STRING
         WHEN 'clean' THEN 4
         ELSE 1
     END;
