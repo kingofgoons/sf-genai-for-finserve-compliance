@@ -47,20 +47,25 @@ SELECT
         ['confidentiality', 'deletion', 'risk']
     ):categories[1]:sentiment::STRING AS confidentiality_sentiment,
     
-    -- Step 3: Classification (multi-label: email can have multiple violations)
+    -- Step 3: Classification (multi-label with descriptions)
+    -- Empty array = no violations = clean
     ARRAY_TO_STRING(
         AI_CLASSIFY(
             CASE 
                 WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
                 ELSE e.email_content
             END,
-            ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
-            {'output_mode': 'multi'}
+            [
+                {'label': 'insider_trading', 'description': 'sharing non-public information for trading advantage'},
+                {'label': 'market_manipulation', 'description': 'coordinating trades to artificially move prices'},
+                {'label': 'data_exfiltration', 'description': 'sharing confidential company data externally'},
+                {'label': 'policy_violation', 'description': 'instructions to delete evidence or hide communications'}
+            ],
+            {'task_description': 'Identify compliance violations in financial services communications', 'output_mode': 'multi'}
         ):labels, ', '
     ) AS violations,
     
     -- Step 4: Extract evidence
-    -- Step 4: Extract evidence (AI_EXTRACT takes array of items to extract)
     AI_EXTRACT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
@@ -69,41 +74,62 @@ SELECT
         ['violating phrases', 'securities mentioned', 'concealment instructions']
     ) AS extracted_evidence,
     
-    -- Derived: Severity level (check for critical violations in label array)
+    -- Derived: Severity level (check for critical violations)
     CASE 
         WHEN ARRAYS_OVERLAP(
             AI_CLASSIFY(
                 CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
-                {'output_mode': 'multi'}
+                [
+                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
+                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
+                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
+                    {'label': 'policy_violation', 'description': 'deleting evidence'}
+                ],
+                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
             ):labels,
             ARRAY_CONSTRUCT('insider_trading', 'market_manipulation')
         ) THEN 'CRITICAL'
         WHEN ARRAY_CONTAINS('data_exfiltration'::VARIANT,
             AI_CLASSIFY(
                 CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
-                {'output_mode': 'multi'}
+                [
+                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
+                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
+                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
+                    {'label': 'policy_violation', 'description': 'deleting evidence'}
+                ],
+                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
             ):labels
         ) THEN 'SENSITIVE'
+        WHEN ARRAY_SIZE(
+            AI_CLASSIFY(
+                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
+                [
+                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
+                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
+                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
+                    {'label': 'policy_violation', 'description': 'deleting evidence'}
+                ],
+                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
+            ):labels
+        ) > 0 THEN 'POTENTIALLY_SENSITIVE'
         ELSE 'CLEAN'
     END AS severity,
     
-    -- Derived: Recommended action
+    -- Derived: Recommended action (any violation = escalate)
     CASE 
-        WHEN NOT ARRAY_CONTAINS('clean'::VARIANT,
+        WHEN ARRAY_SIZE(
             AI_CLASSIFY(
                 CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
-                {'output_mode': 'multi'}
+                [
+                    {'label': 'insider_trading', 'description': 'sharing non-public information'},
+                    {'label': 'market_manipulation', 'description': 'coordinating trades'},
+                    {'label': 'data_exfiltration', 'description': 'sharing confidential data externally'},
+                    {'label': 'policy_violation', 'description': 'deleting evidence'}
+                ],
+                {'task_description': 'Identify compliance violations', 'output_mode': 'multi'}
             ):labels
-        ) OR ARRAY_SIZE(
-            AI_CLASSIFY(
-                CASE WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en') ELSE e.email_content END,
-                ['insider_trading', 'market_manipulation', 'data_exfiltration', 'clean'],
-                {'output_mode': 'multi'}
-            ):labels
-        ) > 1 THEN '🚨 ESCALATE'
+        ) > 0 THEN '🚨 ESCALATE'
         ELSE '✅ NO ACTION'
     END AS recommended_action
 
@@ -138,7 +164,7 @@ SELECT
     severity,
     extracted_evidence
 FROM aisql_email_analysis
-WHERE violations NOT LIKE '%clean%' OR violations LIKE '%,%';  -- Has violations
+WHERE violations IS NOT NULL AND violations != '';  -- Has violations
 
 -- =============================================================================
 -- ATTACHMENT ANALYSIS (Using AI_CLASSIFY + AI_EXTRACT)
@@ -151,12 +177,17 @@ SELECT
     a.filename,
     a.file_type,
     
-    -- Classify attachment content (multi-label)
+    -- Classify attachment content (multi-label, no 'clean' - empty = clean)
     ARRAY_TO_STRING(
         AI_CLASSIFY(
             a.image_description,
-            ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean'],
-            {'output_mode': 'multi'}
+            [
+                {'label': 'data_leak', 'description': 'sensitive data visible in image'},
+                {'label': 'insider_info', 'description': 'non-public financial information'},
+                {'label': 'unauthorized_sharing', 'description': 'internal-only or restricted content'},
+                {'label': 'credential_exposure', 'description': 'passwords, IPs, or system access info'}
+            ],
+            {'task_description': 'Identify security concerns in document/image content', 'output_mode': 'multi'}
         ):labels, ', '
     ) AS violations,
     
@@ -166,19 +197,19 @@ SELECT
         ['sensitive data visible', 'confidential markings', 'internal identifiers']
     ) AS sensitive_elements,
     
-    -- Severity
+    -- Severity (any violation = sensitive, empty = clean)
     CASE 
-        WHEN NOT ARRAY_CONTAINS('clean'::VARIANT,
+        WHEN ARRAY_SIZE(
             AI_CLASSIFY(a.image_description,
-                ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean'],
-                {'output_mode': 'multi'}
+                [
+                    {'label': 'data_leak', 'description': 'sensitive data visible'},
+                    {'label': 'insider_info', 'description': 'non-public financial information'},
+                    {'label': 'unauthorized_sharing', 'description': 'internal-only content'},
+                    {'label': 'credential_exposure', 'description': 'passwords or system access'}
+                ],
+                {'task_description': 'Identify security concerns', 'output_mode': 'multi'}
             ):labels
-        ) OR ARRAY_SIZE(
-            AI_CLASSIFY(a.image_description,
-                ['data_leak', 'insider_info', 'unauthorized_sharing', 'clean'],
-                {'output_mode': 'multi'}
-            ):labels
-        ) > 1 THEN 'SENSITIVE'
+        ) > 0 THEN 'SENSITIVE'
         ELSE 'CLEAN'
     END AS severity
 
