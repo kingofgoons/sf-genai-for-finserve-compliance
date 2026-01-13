@@ -11,7 +11,6 @@ USE ROLE ACCOUNTADMIN;  -- Or role with CREATE DATABASE
 
 CREATE DATABASE IF NOT EXISTS GENAI_COMPLIANCE_DEMO;
 USE DATABASE GENAI_COMPLIANCE_DEMO;
-CREATE SCHEMA IF NOT EXISTS PUBLIC;
 USE SCHEMA PUBLIC;
 
 CREATE WAREHOUSE IF NOT EXISTS GENAI_HOL_WH
@@ -163,7 +162,7 @@ INSERT INTO email_attachments VALUES
 SELECT '✅ Setup complete!' AS status;
 
 -- Summary counts
-SELECT 'compliance_emails' AS table_name, COUNT(*) AS rows FROM compliance_emails
+SELECT 'compliance_emails' AS table_name, COUNT(*) AS row_count FROM compliance_emails
 UNION ALL 
 SELECT 'email_attachments', COUNT(*) FROM email_attachments;
 
