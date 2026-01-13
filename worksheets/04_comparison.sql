@@ -19,9 +19,9 @@ SELECT
     'AISQL' AS approach,
     a.email_id,
     a.subject,
-    a.violation_type,
-    a.severity,
-    ROUND(a.classification_confidence, 2) AS confidence
+    a.violations_list AS violation_type,
+    a.compliance_flag AS severity,
+    a.violation_count AS violation_count
 FROM aisql_email_analysis a
 
 UNION ALL
@@ -42,14 +42,14 @@ ORDER BY email_id, approach;
 -- AISQL cannot do this - COMPLETE is required
 -- =============================================================================
 
--- AISQL approach can only analyze attachment metadata
+-- AISQL approach can only analyze attachment text descriptions
 SELECT 
     'AISQL Limitation' AS note,
     a.email_id,
     a.filename,
     a.file_type,
     'Can only classify text description' AS capability,
-    NULL AS image_analysis
+    a.violations_list AS detected_violations
 FROM aisql_attachment_analysis a;
 
 -- COMPLETE approach analyzes actual image content
@@ -59,7 +59,7 @@ SELECT
     c.filename,
     c.analysis:violation_type::STRING AS detected_violation,
     c.analysis:severity::STRING AS severity,
-    c.analysis:visible_confidential_info AS what_was_found
+    c.analysis:sensitive_elements AS what_was_found
 FROM complete_attachment_analysis c;
 
 -- =============================================================================
@@ -89,17 +89,21 @@ SELECT
     c.email_id,
     c.subject,
     c.email_severity,
-    c.attachment_file,
+    c.attachment AS attachment_file,
     c.attachment_severity,
     c.overall_severity,
-    c.attachment_escalates_risk,
     CASE 
-        WHEN c.attachment_escalates_risk 
+        WHEN c.attachment_severity IN ('CRITICAL', 'SENSITIVE') 
+         AND c.email_severity NOT IN ('CRITICAL', 'SENSITIVE')
+        THEN TRUE ELSE FALSE 
+    END AS attachment_escalates_risk,
+    CASE 
+        WHEN c.attachment_severity IN ('CRITICAL', 'SENSITIVE') 
         THEN '⚠️ Attachment contains additional violations'
         ELSE ''
     END AS note
-FROM complete_full_analysis c
-WHERE c.attachment_file IS NOT NULL;
+FROM complete_dashboard c
+WHERE c.attachment IS NOT NULL;
 
 -- =============================================================================
 -- APPROACH COMPARISON SUMMARY
@@ -175,8 +179,12 @@ WHERE e.email_id IN (1, 2, 3);
 SELECT 
     overall_severity,
     COUNT(*) AS count,
-    SUM(CASE WHEN attachment_escalates_risk THEN 1 ELSE 0 END) AS escalated_by_attachment
-FROM complete_full_analysis
+    SUM(CASE 
+        WHEN attachment_severity IN ('CRITICAL', 'SENSITIVE') 
+         AND email_severity NOT IN ('CRITICAL', 'SENSITIVE')
+        THEN 1 ELSE 0 
+    END) AS escalated_by_attachment
+FROM complete_dashboard
 GROUP BY overall_severity
 ORDER BY 
     CASE overall_severity
