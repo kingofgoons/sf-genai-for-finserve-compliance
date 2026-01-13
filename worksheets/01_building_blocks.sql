@@ -53,18 +53,18 @@ WHERE lang != 'en';
 
 -- =============================================================================
 -- STEP 3: AI_SENTIMENT
--- Analyze sentiment toward compliance-relevant BEHAVIORS
+-- Analyze sentiment toward compliance-relevant TOPICS
 -- Returns: positive, negative, neutral, mixed, unknown for each category
 -- 
 -- Key insight: A friendly email can still violate compliance!
--- We detect sentiment TOWARD these behaviors (positive = encouraging them):
---   - insider tips: non-public information sharing
---   - coordinated trading: market manipulation
---   - leaking internal data: data exfiltration
---   - deleting evidence: destruction of records
+-- Simple single-word categories work better with sentiment models:
+--   - confidentiality: how the email treats confidential info
+--   - timing: urgency, deadlines, "act now"
+--   - deletion: destroying/removing records
+--   - risk: dangerous, forbidden activities
 -- =============================================================================
 
--- First, see the raw sentiment analysis with behavior categories
+-- First, see the raw sentiment analysis
 SELECT 
     email_id,
     sender,
@@ -75,30 +75,33 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
+        ['confidentiality', 'timing', 'deletion', 'risk']
     ) AS sentiment_analysis
 FROM compliance_emails;
 
--- Extract and flag concerning behaviors
--- POSITIVE sentiment toward these behaviors = RED FLAG (they're encouraging violations!)
+-- Extract and flag concerning patterns
+-- NEGATIVE toward confidentiality = disregarding it = BAD
+-- POSITIVE toward deletion = encouraging it = BAD
+-- POSITIVE toward risk = encouraging risky behavior = BAD
 SELECT 
     email_id,
     subject,
     sentiment:categories[0]:sentiment::STRING AS overall_tone,
-    sentiment:categories[1]:sentiment::STRING AS insider_tips,
-    sentiment:categories[2]:sentiment::STRING AS coordinated_trading,
-    sentiment:categories[3]:sentiment::STRING AS leaking_data,
-    sentiment:categories[4]:sentiment::STRING AS deleting_evidence,
-    -- Flag based on POSITIVE sentiment toward bad behaviors
+    sentiment:categories[1]:sentiment::STRING AS confidentiality,
+    sentiment:categories[2]:sentiment::STRING AS timing,
+    sentiment:categories[3]:sentiment::STRING AS deletion,
+    sentiment:categories[4]:sentiment::STRING AS risk,
+    -- Flag logic
     CASE 
-        WHEN sentiment:categories[1]:sentiment::STRING IN ('positive', 'mixed')  -- insider tips
-        THEN '🔴 CRITICAL - Insider Information'
-        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed')  -- coordinated trading
-        THEN '🔴 CRITICAL - Market Manipulation'
-        WHEN sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')  -- leaking data
-        THEN '🟠 HIGH - Data Exfiltration'
-        WHEN sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')  -- deleting evidence
-        THEN '🟠 HIGH - Evidence Destruction'
+        WHEN sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')  -- positive toward risk
+        THEN '🔴 CRITICAL - Risky Behavior Encouraged'
+        WHEN sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')  -- positive toward deletion
+        THEN '🔴 CRITICAL - Evidence Destruction'
+        WHEN sentiment:categories[1]:sentiment::STRING IN ('negative', 'mixed')  -- negative toward confidentiality
+        THEN '🟠 HIGH - Confidentiality Breach'
+        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed')  -- urgent timing
+          AND sentiment:categories[0]:sentiment::STRING = 'negative'             -- with negative overall tone
+        THEN '🟡 REVIEW - Urgent & Negative'
         ELSE '🟢 Clean'
     END AS compliance_flag
 FROM (
@@ -110,16 +113,16 @@ FROM (
                 WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
                 ELSE email_content
             END,
-            ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
+            ['confidentiality', 'timing', 'deletion', 'risk']
         ) AS sentiment
     FROM compliance_emails
 )
 ORDER BY 
     CASE compliance_flag
-        WHEN '🔴 CRITICAL - Insider Information' THEN 1
-        WHEN '🔴 CRITICAL - Market Manipulation' THEN 2
-        WHEN '🟠 HIGH - Data Exfiltration' THEN 3
-        WHEN '🟠 HIGH - Evidence Destruction' THEN 4
+        WHEN '🔴 CRITICAL - Risky Behavior Encouraged' THEN 1
+        WHEN '🔴 CRITICAL - Evidence Destruction' THEN 2
+        WHEN '🟠 HIGH - Confidentiality Breach' THEN 3
+        WHEN '🟡 REVIEW - Urgent & Negative' THEN 4
         ELSE 5
     END;
 
@@ -228,13 +231,13 @@ SELECT
         ELSE email_content
     END, 100) || '...' AS content_preview,
     
-    -- Sentiment toward compliance-relevant behaviors
+    -- Sentiment toward compliance-relevant topics
     AI_SENTIMENT(
         CASE 
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['insider tips', 'coordinated trading', 'leaking internal data']
+        ['confidentiality', 'deletion', 'risk']
     ):categories[0]:sentiment::STRING AS overall_tone,
     
     -- Classification
@@ -274,10 +277,11 @@ We've learned the building blocks:
 
 1. CORTEX.COMPLETE - Detect language (stored in lang column)
 2. AI_TRANSLATE    - Translate non-English emails using the lang column
-3. AI_SENTIMENT    - Analyze sentiment toward BEHAVIORS:
-                     - insider tips, coordinated trading, leaking data, deleting evidence
-                     POSITIVE sentiment = encouraging violations (flag!)
-                     Works even on friendly-toned emails with violations
+3. AI_SENTIMENT    - Analyze sentiment toward compliance TOPICS:
+                     - confidentiality (NEGATIVE = disregarding = BAD)
+                     - deletion (POSITIVE = encouraging destruction = BAD)
+                     - risk (POSITIVE = encouraging risky behavior = BAD)
+                     Works even on friendly-toned emails with violations!
 4. AI_CLASSIFY     - Categorize violation types
 5. AI_EXTRACT      - Pull specific violating phrases as evidence
 

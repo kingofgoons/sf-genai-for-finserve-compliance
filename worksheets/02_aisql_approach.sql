@@ -29,22 +29,23 @@ SELECT
         ELSE e.email_content
     END AS english_content,
     
-    -- Step 2: Sentiment analysis (behavior-focused categories)
-    -- Positive sentiment toward bad behaviors = RED FLAG
+    -- Step 2: Sentiment analysis (compliance-focused categories)
+    -- Negative toward confidentiality = disregarding it = BAD
+    -- Positive toward deletion/risk = encouraging bad behavior = BAD
     AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
+        ['confidentiality', 'deletion', 'risk']
     ):categories[0]:sentiment::STRING AS overall_tone,
     AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['insider tips', 'coordinated trading', 'leaking internal data', 'deleting evidence']
-    ):categories[1]:sentiment::STRING AS insider_tips_sentiment,
+        ['confidentiality', 'deletion', 'risk']
+    ):categories[1]:sentiment::STRING AS confidentiality_sentiment,
     
     -- Step 3: Classification
     AI_CLASSIFY(
