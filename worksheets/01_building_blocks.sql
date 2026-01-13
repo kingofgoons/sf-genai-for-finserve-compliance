@@ -55,10 +55,15 @@ WHERE lang != 'en';
 -- STEP 3: AI_SENTIMENT
 -- Analyze sentiment across compliance-relevant categories
 -- Returns: positive, negative, neutral, mixed, unknown for each category
+-- 
+-- Categories chosen for compliance detection:
+--   - threats: intimidation, coercion, consequences
+--   - deception: hiding, lying, covering up
+--   - fear: anxiety about getting caught
+--   - aggression: hostile, demanding tone
 -- =============================================================================
 
--- Analyze sentiment with compliance-relevant categories
--- Categories: urgency, secrecy, pressure, professionalism
+-- First, see the raw sentiment analysis with compliance categories
 SELECT 
     email_id,
     sender,
@@ -69,26 +74,29 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['urgency', 'secrecy', 'pressure', 'professionalism']
+        ['threats', 'deception', 'fear', 'aggression']
     ) AS sentiment_analysis
 FROM compliance_emails;
 
--- Extract individual category sentiments for easier analysis
+-- Extract and flag concerning sentiments
 SELECT 
     email_id,
     subject,
     sentiment:categories[0]:sentiment::STRING AS overall,
-    sentiment:categories[1]:sentiment::STRING AS urgency,
-    sentiment:categories[2]:sentiment::STRING AS secrecy,
-    sentiment:categories[3]:sentiment::STRING AS pressure,
-    sentiment:categories[4]:sentiment::STRING AS professionalism,
-    -- Flag concerning patterns
+    sentiment:categories[1]:sentiment::STRING AS threats,
+    sentiment:categories[2]:sentiment::STRING AS deception,
+    sentiment:categories[3]:sentiment::STRING AS fear,
+    sentiment:categories[4]:sentiment::STRING AS aggression,
+    -- Flag emails with concerning sentiment patterns
     CASE 
-        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed') 
-          OR sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')
-        THEN '🔴 Review - Secrecy/Pressure Detected'
-        WHEN sentiment:categories[1]:sentiment::STRING = 'positive'
-        THEN '🟡 Monitor - Urgent Tone'
+        WHEN sentiment:categories[1]:sentiment::STRING IN ('positive', 'mixed')  -- threats present
+          OR sentiment:categories[4]:sentiment::STRING IN ('positive', 'mixed')  -- aggression present
+        THEN '🔴 CRITICAL - Threats/Aggression'
+        WHEN sentiment:categories[2]:sentiment::STRING IN ('positive', 'mixed')  -- deception present
+          OR sentiment:categories[3]:sentiment::STRING IN ('positive', 'mixed')  -- fear present
+        THEN '🟠 HIGH - Deception/Fear Detected'
+        WHEN sentiment:categories[0]:sentiment::STRING = 'negative'
+        THEN '🟡 MONITOR - Negative Tone'
         ELSE '🟢 Normal'
     END AS compliance_flag
 FROM (
@@ -100,15 +108,16 @@ FROM (
                 WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
                 ELSE email_content
             END,
-            ['urgency', 'secrecy', 'pressure', 'professionalism']
+            ['threats', 'deception', 'fear', 'aggression']
         ) AS sentiment
     FROM compliance_emails
 )
 ORDER BY 
     CASE compliance_flag
-        WHEN '🔴 Review - Secrecy/Pressure Detected' THEN 1
-        WHEN '🟡 Monitor - Urgent Tone' THEN 2
-        ELSE 3
+        WHEN '🔴 CRITICAL - Threats/Aggression' THEN 1
+        WHEN '🟠 HIGH - Deception/Fear Detected' THEN 2
+        WHEN '🟡 MONITOR - Negative Tone' THEN 3
+        ELSE 4
     END;
 
 -- =============================================================================
@@ -222,7 +231,7 @@ SELECT
             WHEN lang != 'en' THEN AI_TRANSLATE(email_content, lang, 'en')
             ELSE email_content
         END,
-        ['urgency', 'secrecy', 'pressure']
+        ['threats', 'deception', 'fear', 'aggression']
     ):categories[0]:sentiment::STRING AS overall_sentiment,
     
     -- Classification
@@ -262,7 +271,8 @@ We've learned the building blocks:
 
 1. CORTEX.COMPLETE - Detect language (stored in lang column)
 2. AI_TRANSLATE    - Translate non-English emails using the lang column
-3. AI_SENTIMENT    - Analyze sentiment by compliance categories (urgency, secrecy, pressure)
+3. AI_SENTIMENT    - Analyze sentiment by compliance categories:
+                     - threats, deception, fear, aggression
                      Returns: positive, negative, neutral, mixed, unknown
 4. AI_CLASSIFY     - Categorize violation types
 5. AI_EXTRACT      - Pull specific violating phrases as evidence

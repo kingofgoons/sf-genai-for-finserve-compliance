@@ -30,20 +30,21 @@ SELECT
     END AS english_content,
     
     -- Step 2: Sentiment analysis (compliance-relevant categories)
+    -- Categories: threats, deception, fear, aggression
     AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['urgency', 'secrecy', 'pressure']
+        ['threats', 'deception', 'fear', 'aggression']
     ):categories[0]:sentiment::STRING AS overall_sentiment,
     AI_SENTIMENT(
         CASE 
             WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
             ELSE e.email_content
         END,
-        ['urgency', 'secrecy', 'pressure']
-    ):categories[2]:sentiment::STRING AS secrecy_sentiment,
+        ['threats', 'deception', 'fear', 'aggression']
+    ):categories[2]:sentiment::STRING AS deception_sentiment,
     
     -- Step 3: Classification
     AI_CLASSIFY(
