@@ -387,48 +387,34 @@ Return ONLY the JSON object.',
     ) AS analysis;
 
 -- =============================================================================
--- MULTI-IMAGE COMPARISON (Side-by-side analysis)
--- Compare multiple attachments by analyzing each separately
+-- MULTI-IMAGE COMPARISON (Using PROMPT helper)
+-- Compare multiple attachments from the same email thread
 -- =============================================================================
 
 /*
-NOTE: Multi-image PROMPT() with TO_FILE() may not be supported in all regions.
-Workaround: Analyze images separately and compare results side-by-side.
+Use PROMPT() to analyze multiple images in a single call.
+Placeholders {0}, {1}, etc. reference the TO_FILE() arguments in order.
+NOTE: Avoid curly braces in prompt text - use natural language for JSON keys.
 */
 
--- Analyze both images with identical prompts, then compare results
+-- Compare violation vs clean images to demonstrate AI differentiation
 SELECT 
-    image_name,
-    analysis:classification::STRING AS classification,
-    analysis:severity::STRING AS severity,
-    analysis:key_concerns AS key_concerns,
-    analysis:reasoning::STRING AS reasoning
-FROM (
-    -- Image 1: Infrastructure diagram (should be VIOLATION)
-    SELECT 
-        'trading_infrastructure_v3.jpg' AS image_name,
-        PARSE_JSON(AI_COMPLETE(
-            'claude-3-5-sonnet',
-            'Analyze this image for compliance concerns. Return JSON: {"classification": "violation or clean", "severity": "CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN", "key_concerns": ["list of concerns"], "reasoning": "brief explanation"}. Return ONLY JSON.',
-            TO_FILE('@compliance_attachments', '2024/12/trading_infrastructure_v3.jpg')
-        )) AS analysis
-    
-    UNION ALL
-    
-    -- Image 2: Public market data (should be CLEAN)
-    SELECT 
-        'public_market_summary.jpg' AS image_name,
-        PARSE_JSON(AI_COMPLETE(
-            'claude-3-5-sonnet',
-            'Analyze this image for compliance concerns. Return JSON: {"classification": "violation or clean", "severity": "CRITICAL|SENSITIVE|POTENTIALLY_SENSITIVE|CLEAN", "key_concerns": ["list of concerns"], "reasoning": "brief explanation"}. Return ONLY JSON.',
+    'Multi-image comparison: Violation vs Clean' AS analysis_type,
+    AI_COMPLETE(
+        'llama4-maverick',
+        PROMPT(
+            'You are a compliance analyst. Compare image {0} to image {1}.
+
+For EACH image determine:
+1. Is it a compliance concern or safe?
+2. What severity level: CRITICAL, SENSITIVE, POTENTIALLY_SENSITIVE, or CLEAN?
+3. List any key concerns.
+
+Return your analysis as valid JSON with these keys: image_1_assessment, image_2_assessment, comparison_summary.',
+            TO_FILE('@compliance_attachments', '2024/12/trading_infrastructure_v3.jpg'),
             TO_FILE('@compliance_attachments', '2024/12/public_market_summary.jpg')
-        )) AS analysis
-)
-ORDER BY 
-    CASE classification 
-        WHEN 'violation' THEN 1 
-        ELSE 2 
-    END;
+        )
+    ) AS analysis;
 
 -- =============================================================================
 -- IMAGE CLASSIFICATION WITH AI_CLASSIFY
