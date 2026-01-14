@@ -52,9 +52,9 @@ A hands-on lab demonstrating Snowflake Cortex AI for email and attachment compli
 
 | File | Email | Content |
 |------|-------|---------|
+| `AAPL_Analysis.png` | #2 | Spreadsheet with insider trading analysis, "BUY BEFORE ANNOUNCEMENT" |
 | `order_entry_screenshot.jpg` | #3 | Trading system screenshot with coordination notes |
 | `trading_infrastructure_v3.jpg` | #5 | Internal architecture diagram, IPs, "NOT FOR EXTERNAL" |
-| `ACME.Finance.Trading.Infra.jpg` | #5 | Additional internal infrastructure diagram |
 | `public_market_summary.jpg` | #6 | Public market data (CLEAN - no violation) |
 
 ## Violation Levels

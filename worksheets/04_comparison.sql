@@ -1,9 +1,11 @@
 -- =============================================================================
 -- 04_COMPARISON.SQL
--- Compare Approaches: AISQL vs CORTEX.COMPLETE
+-- Compare Approaches: AISQL vs AI_COMPLETE with Structured Outputs
 -- 
--- See the differences, especially for image handling.
--- Choose the approach that fits YOUR use case.
+-- See the differences, especially for:
+-- 1. Text analysis (both approaches work)
+-- 2. Image handling (COMPLETE required)
+-- 3. Schema enforcement (structured outputs advantage)
 -- =============================================================================
 
 USE ROLE GENAI_COMPLIANCE_ROLE;
@@ -52,15 +54,79 @@ SELECT
     a.violations_list AS detected_violations
 FROM aisql_attachment_analysis a;
 
--- COMPLETE approach analyzes actual image content
+-- COMPLETE approach analyzes actual image content using TO_FILE()
 SELECT 
-    'COMPLETE Capability' AS note,
+    'AI_COMPLETE + TO_FILE()' AS note,
     c.email_id,
     c.filename,
     c.analysis:violation_type::STRING AS detected_violation,
     c.analysis:severity::STRING AS severity,
     c.analysis:sensitive_elements AS what_was_found
 FROM complete_attachment_analysis c;
+
+-- Direct image analysis syntax demonstration
+/*
+AI_COMPLETE multimodal syntax uses TO_FILE() to reference stage files:
+
+    -- Single image
+    AI_COMPLETE('claude-3-5-sonnet', 'prompt', TO_FILE(@stage, 'file.jpg'))
+    
+    -- Multiple images with PROMPT() helper (placeholders {0}, {1}, etc.)
+    AI_COMPLETE('llama4-maverick', 
+        PROMPT('Compare {0} to {1}', 
+            TO_FILE(@stage, 'a.jpg'), 
+            TO_FILE(@stage, 'b.jpg')))
+    
+    -- Quick classification
+    AI_CLASSIFY(TO_FILE(@stage, 'file.jpg'), ['Category1', 'Category2'])
+*/
+
+-- =============================================================================
+-- KEY DIFFERENCE #2: Schema Enforcement with Structured Outputs
+-- =============================================================================
+
+/*
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                    STRUCTURED OUTPUTS vs PROMPT-BASED JSON                    │
+├───────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  OLD APPROACH (prompt-based):                                                 │
+│    SNOWFLAKE.CORTEX.COMPLETE(                                                 │
+│        'claude-sonnet-4-5',                                                   │
+│        'Return ONLY valid JSON: {"field": "value"...}'                        │
+│    )                                                                          │
+│    ↓                                                                          │
+│    ❌ Model might include markdown, explanations, or malformed JSON           │
+│    ❌ Must use TRY_PARSE_JSON to handle failures                              │
+│    ❌ No guarantee of field presence or data types                            │
+│                                                                               │
+│  NEW APPROACH (response_format parameter):                                    │
+│    AI_COMPLETE(                                                               │
+│        model => 'claude-sonnet-4-5',                                          │
+│        prompt => 'Analyze this email...',                                     │
+│        response_format => {'type': 'json', 'schema': {...}}                   │
+│    )                                                                          │
+│    ↓                                                                          │
+│    ✅ JSON schema enforced at token generation                                │
+│    ✅ All 'required' fields guaranteed present                                │
+│    ✅ 'enum' values constrained to valid options                              │
+│    ✅ Safe to use PARSE_JSON directly                                         │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+*/
+
+-- Demonstrate structured output consistency
+SELECT 
+    email_id,
+    subject,
+    -- These are GUARANTEED to exist and be valid types due to response_format schema
+    analysis:violation_type::STRING AS violation_type,     -- Always one of the enum values
+    analysis:severity::STRING AS severity,                 -- Always one of: CRITICAL, SENSITIVE, etc.
+    analysis:confidence::NUMBER AS confidence,             -- Always a number 0-100
+    analysis:recommended_action::STRING AS action,         -- Always one of the enum values
+    ARRAY_SIZE(analysis:violating_phrases) AS evidence_count  -- Array always present
+FROM complete_email_analysis
+ORDER BY confidence DESC;
 
 -- =============================================================================
 -- THE BIG PICTURE: Why Images Matter for Compliance
@@ -112,31 +178,45 @@ WHERE c.attachment IS NOT NULL;
 /*
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         CHOOSE YOUR APPROACH                                │
-├────────────────────┬────────────────────────────────────────────────────────┤
-│                    │  AISQL Functions      │  CORTEX.COMPLETE              │
+├────────────────────┬───────────────────────┬────────────────────────────────┤
+│                    │  AISQL Functions      │  AI_COMPLETE + Structured      │
 ├────────────────────┼───────────────────────┼────────────────────────────────┤
-│  Text Analysis     │  ✅ Fast, simple      │  ✅ Full control              │
-│  Classification    │  ✅ AI_CLASSIFY       │  ✅ Custom categories         │
-│  Entity Extraction │  ✅ AI_EXTRACT        │  ✅ Custom schemas            │
-│  Sentiment         │  ✅ AI_SENTIMENT      │  ✅ Custom scales             │
-│  Translation       │  ✅ AI_TRANSLATE      │  ✅ Use AI_TRANSLATE          │
+│  Text Analysis     │  ✅ Fast, simple      │  ✅ Full control               │
+│  Classification    │  ✅ AI_CLASSIFY       │  ✅ Custom categories          │
+│  Entity Extraction │  ✅ AI_EXTRACT        │  ✅ Custom schemas             │
+│  Sentiment         │  ✅ AI_SENTIMENT      │  ✅ Custom scales              │
+│  Translation       │  ✅ AI_TRANSLATE      │  ✅ Use AI_TRANSLATE           │
 ├────────────────────┼───────────────────────┼────────────────────────────────┤
-│  IMAGE ANALYSIS    │  ❌ NOT SUPPORTED     │  ✅ FULL MULTIMODAL           │
-│  Screenshots       │  ❌                   │  ✅ Analyze UI, annotations   │
-│  Spreadsheets      │  ❌                   │  ✅ Read visible content      │
-│  Diagrams          │  ❌                   │  ✅ Detect sensitive info     │
-│  Documents         │  ❌                   │  ✅ OCR + analysis            │
+│  JSON Output       │  ⚠️ Function-specific │  ✅ GUARANTEED by schema       │
+│  Custom Schema     │  ❌ Fixed output      │  ✅ Define any structure       │
+│  Enum Constraints  │  ❌ Not supported     │  ✅ Enforce valid values       │
 ├────────────────────┼───────────────────────┼────────────────────────────────┤
-│  Best For          │  Quick text analysis  │  Full compliance pipeline     │
-│                    │  High volume, simple  │  Complex analysis + images    │
+│  IMAGE ANALYSIS    │  ❌ NOT SUPPORTED     │  ✅ TO_FILE() + MULTIMODAL     │
+│  Screenshots       │  ❌                   │  ✅ Analyze UI, annotations    │
+│  Spreadsheets      │  ❌                   │  ✅ Read visible content       │
+│  Diagrams          │  ❌                   │  ✅ Detect sensitive info      │
+│  Multi-Image       │  ❌                   │  ✅ PROMPT() for comparison    │
+│  Image Classify    │  ❌                   │  ✅ AI_CLASSIFY + TO_FILE()    │
+├────────────────────┼───────────────────────┼────────────────────────────────┤
+│  Best For          │  Quick text analysis  │  Full compliance pipeline      │
+│                    │  High volume, simple  │  Complex analysis + images     │
+│                    │  Standard categories  │  Custom schemas + multimodal   │
 └────────────────────┴───────────────────────┴────────────────────────────────┘
+
+MULTIMODAL SYNTAX REFERENCE:
+• Single image: AI_COMPLETE('model', 'prompt', TO_FILE(@stage, 'file.jpg'))
+• Multi-image:  AI_COMPLETE('model', PROMPT('Compare {0} to {1}', TO_FILE(...), TO_FILE(...)))
+• Classify:     AI_CLASSIFY(TO_FILE(@stage, 'file.jpg'), ['Cat1', 'Cat2'])
+
+SUPPORTED FORMATS: .jpg, .jpeg, .png, .webp, .gif
+CLAUDE LIMITS: 3.75 MB per image, 8000x8000 max pixels, 20 images per prompt
 */
 
 -- =============================================================================
--- RECOMMENDATION: HYBRID APPROACH
+-- RECOMMENDATION: HYBRID APPROACH WITH STRUCTURED OUTPUTS
 -- =============================================================================
 
--- Best of both worlds: Use each where it excels
+-- Best of both worlds: Use AISQL for translation, AI_COMPLETE for analysis with schema
 
 SELECT 
     e.email_id,
@@ -149,18 +229,33 @@ SELECT
         ELSE 'English (no translation)'
     END AS translation_handled_by_aisql,
     
-    -- Use COMPLETE for analysis (powerful, flexible)
+    -- Use AI_COMPLETE with structured output for analysis (powerful, schema-enforced)
     PARSE_JSON(
-        REGEXP_REPLACE(
-            AI_COMPLETE(
-                'claude-sonnet-4-5',
-                'Quick compliance check. Return ONLY raw JSON, no markdown: {"risk": "high/medium/low", "reason": "..."} Email: ' || 
+        AI_COMPLETE(
+            model => 'claude-sonnet-4-5',
+            prompt => 'Quick compliance risk assessment for this email: ' || 
                 CASE 
                     WHEN e.lang != 'en' THEN AI_TRANSLATE(e.email_content, e.lang, 'en')
                     ELSE e.email_content
-                END
-            ),
-            '^```json\\s*|^```\\s*|\\s*```$', ''
+                END,
+            response_format => {
+                'type': 'json',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'risk_level': {
+                            'type': 'string',
+                            'enum': ['high', 'medium', 'low'],
+                            'description': 'Overall risk level of the email'
+                        },
+                        'reason': {
+                            'type': 'string',
+                            'description': 'Brief explanation of the risk assessment'
+                        }
+                    },
+                    'required': ['risk_level', 'reason']
+                }
+            }
         )
     ) AS complete_analysis,
     
@@ -205,27 +300,43 @@ WHAT WE COVERED:
 
 1. BUILDING BLOCKS (01)
    └─ TRANSLATE → SENTIMENT → CLASSIFY → EXTRACT
+   └─ Individual AI SQL functions for specific tasks
 
 2. AISQL APPROACH (02)
    └─ Full text pipeline with fine-tuned functions
    └─ Fast, convenient, but TEXT ONLY
+   └─ Fixed output schemas
 
-3. COMPLETE APPROACH (03)
+3. COMPLETE APPROACH WITH STRUCTURED OUTPUTS (03) ⭐
    └─ Full text pipeline with Frontier models
-   └─ PLUS image attachment analysis ⭐
+   └─ PLUS image attachment analysis
+   └─ GUARANTEED JSON schema compliance via response_format
+   └─ Enum constraints, required fields, custom structures
 
 4. COMPARISON (04)
-   └─ AISQL: Good for text, no images
-   └─ COMPLETE: Full control, handles everything
+   └─ AISQL: Good for text, no images, fixed schemas
+   └─ COMPLETE + Structured Outputs: Full control, handles everything
    └─ HYBRID: Combine both for best results
 
-KEY TAKEAWAY:
+KEY TAKEAWAYS:
+
 ┌─────────────────────────────────────────────────────────────────┐
-│  For TEXT ONLY: Either approach works                          │
-│  For TEXT + IMAGES: You NEED CORTEX.COMPLETE                   │
+│  For TEXT ONLY:                                                 │
+│    → AISQL functions for speed and simplicity                   │
+│    → AI_COMPLETE for custom analysis                            │
 │                                                                 │
-│  Recommendation: Use COMPLETE with structured outputs           │
-│  for maximum flexibility and multimodal support.               │
+│  For TEXT + IMAGES:                                             │
+│    → Use AI_COMPLETE with TO_FILE(@stage, 'file.jpg')           │
+│    → Use PROMPT() helper for multi-image comparison             │
+│    → Use AI_CLASSIFY for quick image categorization             │
+│                                                                 │
+│  For GUARANTEED JSON SCHEMA:                                    │
+│    → Use response_format parameter in AI_COMPLETE               │
+│    → Schema enforced at token generation                        │
+│    → No more TRY_PARSE_JSON workarounds                         │
+│                                                                 │
+│  RECOMMENDATION: Use AI_COMPLETE with structured outputs        │
+│  for text analysis, and TO_FILE() for multimodal compliance.    │
 └─────────────────────────────────────────────────────────────────┘
 
 Cleanup: Run 99_reset.sql when done.

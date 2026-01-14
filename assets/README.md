@@ -2,45 +2,57 @@
 
 Mock email attachments for the compliance demo. Upload these to `@compliance_attachments` stage.
 
-## Files Included
+## Files Needed
 
-| File | Description |
-|------|-------------|
-| `AAPL_Insider_Analysis.xlsx` | Spreadsheet with insider trading analysis |
-| `AAPL_Analysis.png` | Screenshot of the Excel spreadsheet |
-| `order_entry_screenshot.png` | Trading system screenshot with coordination evidence |
-| `trading_infrastructure_v3.pdf` | Internal architecture diagram |
-| `ACME.Finance.Trading.Infra.png` | PNG version of architecture diagram |
+| File | Type | Compliance Scenario |
+|------|------|---------------------|
+| `AAPL_Analysis.png` | PNG | Insider trading (VIOLATION) |
+| `order_entry_screenshot.jpg` | JPEG | Coordinated trading (VIOLATION) |
+| `trading_infrastructure_v3.jpg` | JPEG | Data exfiltration (VIOLATION) |
+| `public_market_summary.jpg` | JPEG | Public market data (CLEAN) |
+
+**Supported formats:** `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`  
+**Not supported:** `.pdf`, `.xlsx`, `.docx` (use screenshots instead)
 
 ## Uploading to Snowflake Stage
 
 ```sql
--- Create stage (done in 00_setup.sql)
-CREATE STAGE IF NOT EXISTS compliance_attachments;
+-- From SnowSQL CLI:
+USE DATABASE GENAI_COMPLIANCE_DEMO;
+USE SCHEMA PUBLIC;
 
--- Upload files (run from SnowSQL or Snowsight)
-PUT file:///path/to/assets/AAPL_Insider_Analysis.xlsx @compliance_attachments/2024/12/;
-PUT file:///path/to/assets/AAPL_Analysis.png @compliance_attachments/2024/12/;
-PUT file:///path/to/assets/order_entry_screenshot.png @compliance_attachments/2024/12/;
-PUT file:///path/to/assets/trading_infrastructure_v3.pdf @compliance_attachments/2024/12/;
-PUT file:///path/to/assets/ACME.Finance.Trading.Infra.png @compliance_attachments/2024/12/;
+PUT file:///path/to/assets/AAPL_Analysis.png @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
+PUT file:///path/to/assets/order_entry_screenshot.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
+PUT file:///path/to/assets/trading_infrastructure_v3.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
+PUT file:///path/to/assets/public_market_summary.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
 
 -- Verify upload
 LIST @compliance_attachments;
 ```
 
-## Using Real Images in the Demo
+Or use Snowsight UI: Data → Databases → GENAI_COMPLIANCE_DEMO → PUBLIC → Stages → COMPLIANCE_ATTACHMENTS → "+ Files"
 
-Once files are uploaded, use `GET_PRESIGNED_URL()` to pass to CORTEX.COMPLETE:
+## Using Images in AI_COMPLETE
 
 ```sql
-SELECT SNOWFLAKE.CORTEX.COMPLETE(
-    'claude-sonnet-4-5',
-    'Analyze this image for compliance concerns. Return JSON with violation_type, severity, and concerns.',
-    GET_PRESIGNED_URL(@compliance_attachments, '2024/12/order_entry_screenshot.png')
-) AS image_analysis;
+-- Single image analysis
+SELECT AI_COMPLETE(
+    'claude-3-5-sonnet',
+    'Analyze this image for compliance concerns.',
+    TO_FILE('@compliance_attachments', '2024/12/order_entry_screenshot.jpg')
+) AS analysis;
+
+-- Multi-image comparison
+SELECT AI_COMPLETE(
+    'llama4-maverick',
+    PROMPT(
+        'Compare image {0} to image {1} for compliance concerns.',
+        TO_FILE('@compliance_attachments', '2024/12/trading_infrastructure_v3.jpg'),
+        TO_FILE('@compliance_attachments', '2024/12/public_market_summary.jpg')
+    )
+) AS comparison;
 ```
 
 ## Note
 
-For the demo worksheets, the `image_description` column in the `email_attachments` table contains text descriptions that simulate image content. This allows the SQL patterns to work without uploading files. For a fully realistic demo, upload the actual files and modify the queries to use `GET_PRESIGNED_URL()`.
+The `image_description` column in `email_attachments` table contains text descriptions that simulate image content. This allows the AISQL functions to work without uploaded files. For full multimodal analysis with `AI_COMPLETE`, upload actual image files.

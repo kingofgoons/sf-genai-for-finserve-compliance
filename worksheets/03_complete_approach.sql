@@ -7,6 +7,7 @@
 -- Full control, custom schemas, access to Claude/Llama/Mistral.
 -- =============================================================================
 
+USE ROLE GENAI_COMPLIANCE_ROLE;
 USE DATABASE GENAI_COMPLIANCE_DEMO;
 USE SCHEMA PUBLIC;
 USE WAREHOUSE GENAI_HOL_WH;
@@ -280,7 +281,6 @@ PREREQUISITE: Upload attachments to the stage before running these queries.
 
 From SnowSQL or Snowsight file upload:
     PUT file:///path/to/assets/order_entry_screenshot.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
-    PUT file:///path/to/assets/ACME.Finance.Trading.Infra.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
     PUT file:///path/to/assets/trading_infrastructure_v3.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
     PUT file:///path/to/assets/public_market_summary.jpg @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;
 
@@ -332,7 +332,7 @@ Return ONLY the JSON object.',
 
 -- Analyze architecture diagram screenshot for data leak risk
 SELECT 
-    'ACME.Finance.Trading.Infra.jpg' AS filename,
+    'trading_infrastructure_v3.jpg' AS filename,
     AI_COMPLETE(
         'claude-3-5-sonnet',
         'You are a data security analyst reviewing a screenshot of an internal architecture diagram.
@@ -355,7 +355,7 @@ Return your analysis as a JSON object:
 }
 
 Return ONLY the JSON object.',
-        TO_FILE('@compliance_attachments', '2024/12/ACME.Finance.Trading.Infra.jpg')
+        TO_FILE('@compliance_attachments', '2024/12/trading_infrastructure_v3.jpg')
     ) AS analysis;
 
 -- Analyze public market data screenshot - should be flagged as CLEAN (no risk)

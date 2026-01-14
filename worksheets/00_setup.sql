@@ -60,6 +60,63 @@ CREATE OR REPLACE STAGE compliance_attachments
     COMMENT = 'Stage for email attachments (images, documents, spreadsheets)';
 
 -- =============================================================================
+-- UPLOAD ATTACHMENT FILES TO STAGE
+-- Run these PUT commands from SnowSQL CLI or Snowsight file upload
+-- =============================================================================
+
+/*
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    UPLOADING FILES TO THE STAGE                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  OPTION 1: SnowSQL CLI (recommended for multiple files)                     │
+│  ───────────────────────────────────────────────────────────────────────    │
+│  From your terminal, run these commands:                                    │
+│                                                                             │
+│  snowsql -a <account> -u <user>                                             │
+│  USE DATABASE GENAI_COMPLIANCE_DEMO;                                        │
+│  USE SCHEMA PUBLIC;                                                         │
+│                                                                             │
+│  PUT file:///path/to/assets/AAPL_Analysis.png                               │
+│      @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;                  │
+│                                                                             │
+│  PUT file:///path/to/assets/order_entry_screenshot.jpg                      │
+│      @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;                  │
+│                                                                             │
+│  PUT file:///path/to/assets/trading_infrastructure_v3.jpg                   │
+│      @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;                  │
+│                                                                             │
+│  PUT file:///path/to/assets/public_market_summary.jpg                       │
+│      @compliance_attachments/2024/12/ AUTO_COMPRESS=FALSE;                  │
+│                                                                             │
+│  OPTION 2: Snowsight UI                                                     │
+│  ───────────────────────────────────────────────────────────────────────    │
+│  1. Go to Data → Databases → GENAI_COMPLIANCE_DEMO → PUBLIC → Stages        │
+│  2. Click on COMPLIANCE_ATTACHMENTS stage                                   │
+│  3. Click "+ Files" button                                                  │
+│  4. Upload each file to the 2024/12/ folder                                 │
+│                                                                             │
+│  IMPORTANT: Use AUTO_COMPRESS=FALSE for images to preserve format           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Files needed for the demo (located in /assets folder):
+┌────────────────────────────────────┬─────────────┬──────────────────────────┐
+│ Filename                           │ Type        │ Compliance Scenario      │
+├────────────────────────────────────┼─────────────┼──────────────────────────┤
+│ AAPL_Analysis.png                  │ PNG image   │ Insider trading          │
+│ order_entry_screenshot.jpg         │ JPEG image  │ Coordinated trading      │
+│ trading_infrastructure_v3.jpg      │ JPEG image  │ Data exfiltration        │
+│ public_market_summary.jpg          │ JPEG image  │ CLEAN (no risk)          │
+└────────────────────────────────────┴─────────────┴──────────────────────────┘
+
+SUPPORTED IMAGE FORMATS: .jpg, .jpeg, .png, .webp, .gif (NO .pdf, .xlsx, .docx)
+*/
+
+-- Verify files are uploaded (run after PUT commands)
+-- LIST @compliance_attachments;
+
+-- =============================================================================
 -- TABLES
 -- =============================================================================
 
@@ -194,8 +251,16 @@ VALUES
 INSERT INTO email_attachments 
     (attachment_id, email_id, filename, file_type, stage_path, file_size_kb, image_description)
 VALUES
+    -- Attachment for Email 2: Screenshot of insider trading analysis spreadsheet (VIOLATION)
+    (1, 2,
+     'AAPL_Analysis.png',
+     'image/png',
+     '@compliance_attachments/2024/12/AAPL_Analysis.png',
+     856,
+     'Screenshot of Excel spreadsheet titled "AAPL Earnings Analysis - CONFIDENTIAL". Contains a table with columns: Date, Expected EPS, Actual EPS, Source. One row highlighted in yellow shows future date with "Source: Internal Contact at Apple". A cell contains the text "BUY BEFORE ANNOUNCEMENT - DELETE AFTER READING". Red banner at top reads "DO NOT DISTRIBUTE". Handwritten annotation says "Sarah confirmed numbers - act fast!".'),
+
     -- Attachment for Email 3: Screenshot of trading system (VIOLATION - coordinated trading)
-    (1, 3,
+    (2, 3,
      'order_entry_screenshot.jpg',
      'image/jpeg',
      '@compliance_attachments/2024/12/order_entry_screenshot.jpg',
@@ -203,20 +268,12 @@ VALUES
      'Screenshot of Bloomberg terminal order entry screen. The screen shows a list of pending orders for NVDA (NVIDIA Corporation). All orders have the same entry time of 10:15:00 AM. There are 8 separate order tickets visible, each from a different trader ID. A handwritten red annotation in the corner reads "COORDINATE WITH TEAM - SAME TIME". Trading account numbers are partially visible. The total order value shown is approximately $2.4 million.'),
 
     -- Attachment for Email 5: Internal architecture diagram (VIOLATION - data leak)
-    (2, 5,
+    (3, 5,
      'trading_infrastructure_v3.jpg',
      'image/jpeg',
      '@compliance_attachments/2024/12/trading_infrastructure_v3.jpg',
      2048,
      'Network architecture diagram with title "ACME Finance - Trading Infrastructure v3.0". The diagram shows connections between multiple systems: Internal Trading Engine (IP: 10.0.1.50), NYSE Direct Feed (connection ID visible), NASDAQ Direct Feed, Client Portfolio Database (server name: PROD-DB-01), Risk Management System, and Backup Data Center. AWS account ID "123456789012" is visible in the corner. A large red watermark across the page reads "INTERNAL USE ONLY - NOT FOR EXTERNAL DISTRIBUTION". The document footer shows "Last updated: November 2024 - Classification: HIGHLY CONFIDENTIAL".'),
-
-    -- Attachment for Email 5: Additional architecture diagram  
-    (3, 5,
-     'ACME.Finance.Trading.Infra.jpg',
-     'image/jpeg',
-     '@compliance_attachments/2024/12/ACME.Finance.Trading.Infra.jpg',
-     1536,
-     'Detailed infrastructure diagram showing ACME Finance internal systems. Contains server rack layout with IP addresses (10.0.0.x range), database connection strings, and firewall rules. Header shows "ACME FINANCE - CONFIDENTIAL". Footer contains AWS region identifiers and VPC configuration details.'),
 
     -- Attachment for Email 6: Public market data (CLEAN - no violation)
     (4, 6,
